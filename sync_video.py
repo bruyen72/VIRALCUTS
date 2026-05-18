@@ -1,15 +1,24 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-sync_video.py — Sincroniza áudio TTS com vídeo para qualquer personagem.
+sync_video.py
+=============
+Corrige áudio desincronizado em vídeos usando TTS para cada personagem.
+Detecta gaps de silêncio no áudio original e alinha cada fala TTS
+exatamente no ponto correto do vídeo.
 
 Uso:
-    python sync_video.py --video input.mp4 --script script.json --output out.mp4
-    python sync_video.py --video input.mp4 --script script.txt  --output out.mp4 --tts edge
-    python sync_video.py --video input.mp4 --script script.json --output out.mp4 --preview
-    python sync_video.py --video input.mp4 --script script.json --output out.mp4 --bgm music.mp3
+    python sync_video.py --video input.mp4 --script script.txt --output synced.mp4
+    python sync_video.py --video input.mp4 --script falas.json --output out.mp4 --tts edge
+    python sync_video.py --video input.mp4 --script script.txt --output out.mp4 --preview 5
+    python sync_video.py --video input.mp4 --script script.txt --output out.mp4 --bgm music.mp3
 
-Formatos de script suportados: JSON, TXT, CSV, YAML
-Motores TTS suportados:  edge (edge-tts, padrão), gtts (gTTS), auto
+Formatos de script: TXT, JSON, CSV, YAML
+Motores TTS: edge (padrão, alta qualidade), gtts (Google)
+
+Dependências:
+    pip install pydub tqdm edge-tts gtts pyyaml
+    ffmpeg deve estar instalado no sistema (PATH)
 """
 
 import argparse
@@ -19,15 +28,29 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-# ─── Logging ──────────────────────────────────────────────────────────────────
+try:
+    from pydub import AudioSegment
+    from pydub.silence import detect_nonsilent
+    HAS_PYDUB = True
+except ImportError:
+    HAS_PYDUB = False
+
+try:
+    from tqdm import tqdm
+    HAS_TQDM = True
+except ImportError:
+    HAS_TQDM = False
+
+# ── Logging ────────────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
     format="[%(levelname)s %(asctime)s] %(message)s",
@@ -36,50 +59,30 @@ logging.basicConfig(
 log = logging.getLogger("sync_video")
 
 
-# ─── Dataclasses ──────────────────────────────────────────────────────────────
+# ── Dataclasses ────────────────────────────────────────────────────────────────
 @dataclass
-class SpeechEntry:
-    """Uma linha de fala do script."""
+class SpeechLine:
     character: str
-    text: str
-    start: Optional[float] = None   # segundos; None = detectar automaticamente
-    end:   Optional[float] = None
-    voice: Optional[str]   = None   # voz TTS específica para este personagem
+    text:      str
+    start:     Optional[float] = None   # seg; None = auto-detectar
+    end:       Optional[float] = None
+    voice:     Optional[str]   = None
 
 
-@dataclass
-class SyncConfig:
-    video_path:  str
-    script_path: str
-    output_path: str
-    tts_engine:  str  = "edge"     # edge | gtts | auto
-    language:    str  = "pt"
-    bgm_path:    Optional[str] = None
-    bgm_volume:  float = 0.15       # volume da música de fundo (0-1)
-    preview_sec: int   = 0          # 0 = processar tudo; >0 = apenas N segundos
-    stretch:     bool  = True       # time-stretch TTS para caber no intervalo
-    log_path:    Optional[str] = None
-    silence_db:  float = -35.0      # threshold de silêncio (dB)
-    silence_dur: float = 0.3        # duração mínima do silêncio (s)
-    overwrite:   bool  = True
+# ── FFmpeg helpers ─────────────────────────────────────────────────────────────
+def _run(cmd: list, check: bool = True) -> subprocess.CompletedProcess:
+    log.debug("CMD: %s", " ".join(str(c) for c in cmd))
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if check and r.returncode != 0:
+        raise RuntimeError(f"Falhou [{cmd[0]}]:\n{r.stderr[-500:]}")
+    return r
 
 
-# ─── Utilitários FFmpeg ───────────────────────────────────────────────────────
-def ffmpeg(*args, check=True, quiet=True) -> subprocess.CompletedProcess:
-    cmd = ["ffmpeg", "-hide_banner", *([] if not quiet else ["-loglevel", "error"]), *args]
-    log.debug("FFmpeg: %s", " ".join(str(a) for a in cmd))
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if check and result.returncode != 0:
-        raise RuntimeError(f"FFmpeg falhou:\n{result.stderr[-600:]}")
-    return result
-
-
-def ffprobe_duration(path: str) -> float:
-    """Retorna duração do arquivo em segundos."""
+def _duration(path: str) -> float:
     r = subprocess.run(
         ["ffprobe", "-v", "error", "-show_entries", "format=duration",
          "-of", "default=noprint_wrappers=1:nokey=1", path],
-        capture_output=True, text=True
+        capture_output=True, text=True,
     )
     try:
         return float(r.stdout.strip())
@@ -87,517 +90,468 @@ def ffprobe_duration(path: str) -> float:
         return 0.0
 
 
-def detect_silence(audio_path: str, noise_db: float = -35.0, min_dur: float = 0.3) -> List[Tuple[float, float]]:
+def extract_audio(video: str, out_wav: str) -> None:
+    """Extrai áudio do vídeo como WAV 16 kHz mono."""
+    _run(["ffmpeg", "-hide_banner", "-loglevel", "error",
+          "-i", video, "-vn", "-ac", "1", "-ar", "16000",
+          "-acodec", "pcm_s16le", "-y", out_wav])
+
+
+def detect_speech_intervals(
+    wav: str,
+    silence_thresh: int = -38,
+    min_silence_ms: int = 300,
+    min_speech_ms:  int = 200,
+) -> List[Tuple[float, float]]:
     """
-    Usa ffmpeg silencedetect para retornar lista de (start, end) dos silêncios.
+    Retorna lista de (start_s, end_s) onde há fala no áudio.
+    Usa pydub se disponível, senão usa ffmpeg silencedetect.
     """
-    r = subprocess.run(
-        ["ffmpeg", "-hide_banner", "-i", audio_path,
-         "-af", f"silencedetect=noise={noise_db}dB:d={min_dur}",
-         "-f", "null", "-"],
-        capture_output=True, text=True
-    )
-    output = r.stderr
-    starts = [float(m) for m in re.findall(r"silence_start:\s*([\d.]+)", output)]
-    ends   = [float(m) for m in re.findall(r"silence_end:\s*([\d.]+)", output)]
-    return list(zip(starts, ends))
+    if HAS_PYDUB:
+        audio = AudioSegment.from_wav(wav)
+        chunks = detect_nonsilent(
+            audio,
+            min_silence_len=min_silence_ms,
+            silence_thresh=silence_thresh,
+        )
+        return [(s / 1000.0, e / 1000.0) for s, e in chunks if (e - s) >= min_speech_ms]
+    else:
+        # Fallback: ffmpeg silencedetect
+        r = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-i", wav,
+             "-af", f"silencedetect=noise={silence_thresh}dB:d={min_silence_ms/1000:.2f}",
+             "-f", "null", "-"],
+            capture_output=True, text=True,
+        )
+        out = r.stderr
+        starts = [float(m) for m in re.findall(r"silence_start:\s*([\d.]+)", out)]
+        ends   = [float(m) for m in re.findall(r"silence_end:\s*([\d.]+)", out)]
+        total  = _duration(wav)
+        silences = list(zip(starts, ends))
+        intervals, cursor = [], 0.0
+        for s, e in silences:
+            if s - cursor >= min_speech_ms / 1000:
+                intervals.append((cursor, s))
+            cursor = e
+        if total - cursor >= min_speech_ms / 1000:
+            intervals.append((cursor, total))
+        return intervals
 
 
-def silence_to_speech(silences: List[Tuple[float,float]], total_dur: float, min_speech: float = 0.3) -> List[Tuple[float, float]]:
-    """Converte lista de silêncios em lista de intervalos de fala."""
-    intervals = []
-    cursor = 0.0
-    for (s_start, s_end) in silences:
-        if s_start - cursor >= min_speech:
-            intervals.append((cursor, s_start))
-        cursor = s_end
-    if total_dur - cursor >= min_speech:
-        intervals.append((cursor, total_dur))
-    return intervals
+# ── TTS engines ────────────────────────────────────────────────────────────────
+def _tts_edge(text: str, out_mp3: str, voice: str = "pt-BR-FranciscaNeural") -> None:
+    import edge_tts
+
+    async def _go():
+        await edge_tts.Communicate(text, voice=voice).save(out_mp3)
+
+    asyncio.run(_go())
 
 
-# ─── Parser de scripts ────────────────────────────────────────────────────────
-class ScriptParser:
-    @staticmethod
-    def parse(path: str) -> List[SpeechEntry]:
-        ext = Path(path).suffix.lower()
-        if ext == ".json":
-            return ScriptParser._json(path)
-        elif ext == ".csv":
-            return ScriptParser._csv(path)
-        elif ext in (".yaml", ".yml"):
-            return ScriptParser._yaml(path)
-        else:
-            return ScriptParser._txt(path)
+def _tts_gtts(text: str, out_mp3: str, lang: str = "pt") -> None:
+    from gtts import gTTS
+    gTTS(text=text, lang=lang).save(out_mp3)
 
-    @staticmethod
-    def _json(path: str) -> List[SpeechEntry]:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
 
-        entries = []
-        # Formato 1: {"Peixe": "texto", "Humano": "texto"}  (simples)
-        if isinstance(data, dict) and all(isinstance(v, str) for v in data.values()):
-            for char, text in data.items():
-                entries.append(SpeechEntry(character=char, text=text))
-            return entries
+EDGE_VOICES = {
+    "pt": "pt-BR-FranciscaNeural",
+    "en": "en-US-JennyNeural",
+    "es": "es-ES-ElviraNeural",
+    "fr": "fr-FR-DeniseNeural",
+}
 
-        # Formato 2: lista de objetos
-        if isinstance(data, list):
-            for item in data:
-                if isinstance(item, dict):
-                    entries.append(SpeechEntry(
-                        character = item.get("character", item.get("personagem", "Narrador")),
-                        text      = item.get("text", item.get("texto", "")),
-                        start     = item.get("start"),
-                        end       = item.get("end"),
-                        voice     = item.get("voice"),
-                    ))
-            return entries
 
-        # Formato 3: {"falas": [...]}
-        if isinstance(data, dict) and "falas" in data:
-            return ScriptParser._json.__func__(ScriptParser,
-                _write_tmp(json.dumps(data["falas"])))
-
-        raise ValueError(f"Formato JSON não reconhecido em {path}")
-
-    @staticmethod
-    def _csv(path: str) -> List[SpeechEntry]:
-        entries = []
-        with open(path, encoding="utf-8", newline="") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                entries.append(SpeechEntry(
-                    character = row.get("character", row.get("personagem", "Narrador")),
-                    text      = row.get("text", row.get("texto", "")),
-                    start     = float(row["start"]) if row.get("start") else None,
-                    end       = float(row["end"])   if row.get("end")   else None,
-                ))
-        return entries
-
-    @staticmethod
-    def _yaml(path: str) -> List[SpeechEntry]:
+def generate_tts(text: str, out_mp3: str, engine: str, lang: str,
+                 voice: Optional[str] = None) -> None:
+    """Gera áudio TTS e salva em out_mp3."""
+    v = voice or EDGE_VOICES.get(lang, "pt-BR-FranciscaNeural")
+    if engine == "edge":
         try:
-            import yaml
-        except ImportError:
-            raise ImportError("Instale pyyaml: pip install pyyaml")
-        with open(path, encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-        entries = []
-        if isinstance(data, list):
-            for item in data:
-                entries.append(SpeechEntry(
-                    character = item.get("character", "Narrador"),
-                    text      = item.get("text", ""),
-                    start     = item.get("start"),
-                    end       = item.get("end"),
-                ))
-        elif isinstance(data, dict):
-            for char, text in data.items():
-                if isinstance(text, str):
-                    entries.append(SpeechEntry(character=char, text=text))
-        return entries
-
-    @staticmethod
-    def _txt(path: str) -> List[SpeechEntry]:
-        """
-        Formato suportado:
-          Peixe: Oi gente!
-          Humano: Olá, mundo!
-          Texto sem prefixo também funciona (personagem = Narrador)
-        """
-        entries = []
-        with open(path, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith("#"):
-                    continue
-                if ":" in line:
-                    char, _, text = line.partition(":")
-                    entries.append(SpeechEntry(character=char.strip(), text=text.strip()))
-                else:
-                    entries.append(SpeechEntry(character="Narrador", text=line))
-        return entries
+            _tts_edge(text, out_mp3, voice=v)
+            return
+        except Exception as exc:
+            log.warning("edge-tts falhou (%s), tentando gTTS...", exc)
+    _tts_gtts(text, out_mp3, lang=lang)
 
 
-def _write_tmp(content: str) -> str:
-    tmp = tempfile.mktemp(suffix=".json")
-    with open(tmp, "w", encoding="utf-8") as f:
-        f.write(content)
-    return tmp
-
-
-# ─── Motores TTS ──────────────────────────────────────────────────────────────
-class TTSEngine:
-    def generate(self, text: str, output_path: str, voice: Optional[str] = None) -> str:
-        raise NotImplementedError
-
-
-class EdgeTTSEngine(TTSEngine):
-    DEFAULT_VOICES = {
-        "pt": "pt-BR-FranciscaNeural",
-        "en": "en-US-JennyNeural",
-        "es": "es-ES-ElviraNeural",
-    }
-
-    def __init__(self, lang: str = "pt"):
-        self.lang = lang
-
-    def generate(self, text: str, output_path: str, voice: Optional[str] = None) -> str:
-        import edge_tts
-        v = voice or self.DEFAULT_VOICES.get(self.lang, "pt-BR-FranciscaNeural")
-
-        async def _run():
-            comm = edge_tts.Communicate(text, voice=v)
-            await comm.save(output_path)
-
-        asyncio.run(_run())
-        return output_path
-
-
-class GTTSEngine(TTSEngine):
-    def __init__(self, lang: str = "pt"):
-        self.lang = lang
-
-    def generate(self, text: str, output_path: str, voice: Optional[str] = None) -> str:
-        from gtts import gTTS
-        tts = gTTS(text=text, lang=self.lang)
-        tts.save(output_path)
-        return output_path
-
-
-def make_tts_engine(name: str, lang: str) -> TTSEngine:
-    if name == "edge":
-        try:
-            import edge_tts
-            return EdgeTTSEngine(lang)
-        except ImportError:
-            log.warning("edge-tts não instalado, usando gTTS como fallback.")
-            return GTTSEngine(lang)
-    elif name == "gtts":
-        return GTTSEngine(lang)
-    elif name == "auto":
-        try:
-            import edge_tts
-            return EdgeTTSEngine(lang)
-        except ImportError:
-            return GTTSEngine(lang)
-    raise ValueError(f"Motor TTS desconhecido: {name}")
-
-
-# ─── Ajuste de duração (time-stretch) ────────────────────────────────────────
-def stretch_audio(input_path: str, output_path: str, target_duration: float) -> str:
+# ── Ajuste de duração ──────────────────────────────────────────────────────────
+def stretch_to_fit(src: str, dst: str, target_s: float) -> None:
     """
-    Ajusta duração do áudio para target_duration usando atempo.
-    Suporta qualquer taxa dentro de [0.5, 100] usando encadeamento de filtros.
+    Ajusta a duração do áudio para target_s via atempo.
+    Encadeia filtros se o ratio estiver fora de [0.5, 2.0].
     """
-    src_dur = ffprobe_duration(input_path)
+    src_dur = _duration(src)
     if src_dur <= 0:
-        raise RuntimeError(f"Não foi possível ler a duração de {input_path}")
+        shutil.copy(src, dst)
+        return
+    ratio = src_dur / max(target_s, 0.1)
+    ratio = max(0.5, min(ratio, 4.0))
 
-    ratio = src_dur / target_duration          # >1 = precisamos acelerar
-    ratio = max(0.5, min(ratio, 4.0))          # limitar à faixa razoável
-
-    # atempo aceita 0.5–2.0; encadear se ratio > 2 ou < 0.5
-    filters = []
-    r = ratio
+    filters, r = [], ratio
     while r > 2.0:
-        filters.append("atempo=2.0")
-        r /= 2.0
+        filters.append("atempo=2.0"); r /= 2.0
     while r < 0.5:
-        filters.append("atempo=0.5")
-        r *= 2.0
-    filters.append(f"atempo={r:.4f}")
-    af = ",".join(filters)
+        filters.append("atempo=0.5"); r *= 2.0
+    filters.append(f"atempo={r:.5f}")
 
-    ffmpeg("-i", input_path, "-af", af, "-y", output_path)
-    return output_path
+    _run(["ffmpeg", "-hide_banner", "-loglevel", "error",
+          "-i", src, "-af", ",".join(filters), "-y", dst])
 
 
-def pad_audio(input_path: str, output_path: str, pad_start: float = 0.0, pad_end: float = 0.0) -> str:
-    """Insere silêncio no início/fim do clip."""
-    filters = []
-    if pad_start > 0:
-        filters.append(f"adelay={int(pad_start*1000)}|{int(pad_start*1000)}")
-    if pad_end > 0:
-        filters.append(f"apad=pad_dur={pad_end:.3f}")
-    if not filters:
-        import shutil; shutil.copy(input_path, output_path); return output_path
-    ffmpeg("-i", input_path, "-af", ",".join(filters), "-y", output_path)
-    return output_path
+# ── Parser de scripts ──────────────────────────────────────────────────────────
+def parse_script(path: str) -> List[SpeechLine]:
+    ext = Path(path).suffix.lower()
+    if ext == ".json":
+        return _parse_json(path)
+    if ext == ".csv":
+        return _parse_csv(path)
+    if ext in (".yaml", ".yml"):
+        return _parse_yaml(path)
+    return _parse_txt(path)
 
 
-# ─── Núcleo de sincronização ──────────────────────────────────────────────────
-class SyncEngine:
-    def __init__(self, cfg: SyncConfig):
-        self.cfg  = cfg
-        self.tts  = make_tts_engine(cfg.tts_engine, cfg.language)
-        self.tmp  = tempfile.mkdtemp(prefix="syncvideo_")
-        self.logs : List[dict] = []
+def _parse_json(path: str) -> List[SpeechLine]:
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    lines = []
+    # {"Peixe": "texto", ...}  ou  [{"character":..., "text":..., "start":...}, ...]
+    if isinstance(data, dict):
+        for char, val in data.items():
+            if isinstance(val, str):
+                lines.append(SpeechLine(character=char, text=val))
+            elif isinstance(val, dict):
+                lines.append(SpeechLine(
+                    character=char,
+                    text=val.get("text", val.get("texto", "")),
+                    start=val.get("start"), end=val.get("end"),
+                    voice=val.get("voice"),
+                ))
+    elif isinstance(data, list):
+        for item in data:
+            lines.append(SpeechLine(
+                character=item.get("character", item.get("personagem", "Narrador")),
+                text=item.get("text", item.get("texto", "")),
+                start=item.get("start"), end=item.get("end"),
+                voice=item.get("voice"),
+            ))
+    return lines
 
-    def _tmp(self, name: str) -> str:
-        return os.path.join(self.tmp, name)
 
-    def run(self) -> str:
-        cfg = self.cfg
-        log.info("Iniciando sincronização: %s → %s", cfg.video_path, cfg.output_path)
+def _parse_csv(path: str) -> List[SpeechLine]:
+    lines = []
+    with open(path, encoding="utf-8", newline="") as f:
+        for row in csv.DictReader(f):
+            lines.append(SpeechLine(
+                character=row.get("character", row.get("personagem", "Narrador")),
+                text=row.get("text", row.get("texto", "")),
+                start=float(row["start"]) if row.get("start") else None,
+                end=float(row["end"])     if row.get("end")   else None,
+            ))
+    return lines
 
-        # 0 — Validações
-        if not os.path.exists(cfg.video_path):
-            raise FileNotFoundError(f"Vídeo não encontrado: {cfg.video_path}")
-        if not os.path.exists(cfg.script_path):
-            raise FileNotFoundError(f"Script não encontrado: {cfg.script_path}")
 
-        # 1 — Parse do script
-        entries = ScriptParser.parse(cfg.script_path)
-        if not entries:
+def _parse_yaml(path: str) -> List[SpeechLine]:
+    try:
+        import yaml
+    except ImportError:
+        raise ImportError("Instale pyyaml: pip install pyyaml")
+    with open(path, encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+    if isinstance(data, list):
+        return [SpeechLine(
+            character=i.get("character", "Narrador"),
+            text=i.get("text", ""),
+            start=i.get("start"), end=i.get("end"),
+        ) for i in data]
+    if isinstance(data, dict):
+        return [SpeechLine(character=k, text=v)
+                for k, v in data.items() if isinstance(v, str)]
+    return []
+
+
+def _parse_txt(path: str) -> List[SpeechLine]:
+    """
+    Aceita:
+        Peixe: Oi, tudo bem?
+        Humano: Olá!
+    ou linhas simples sem prefixo (character = Narrador).
+    """
+    lines = []
+    with open(path, encoding="utf-8") as f:
+        for raw in f:
+            raw = raw.strip()
+            if not raw or raw.startswith("#"):
+                continue
+            if ":" in raw:
+                char, _, text = raw.partition(":")
+                lines.append(SpeechLine(character=char.strip(), text=text.strip()))
+            else:
+                lines.append(SpeechLine(character="Narrador", text=raw))
+    return lines
+
+
+# ── Núcleo de sincronização ────────────────────────────────────────────────────
+def sync_video(
+    video:      str,
+    script:     str,
+    output:     str,
+    tts_engine: str   = "edge",
+    lang:       str   = "pt",
+    bgm:        Optional[str] = None,
+    bgm_vol:    float = 0.15,
+    preview_s:  int   = 0,
+    stretch:    bool  = True,
+    silence_db: float = -38.0,
+    silence_dur:float = 0.3,
+    log_path:   Optional[str] = None,
+) -> str:
+
+    if not os.path.exists(video):
+        raise FileNotFoundError(f"Vídeo não encontrado: {video}")
+    if not os.path.exists(script):
+        raise FileNotFoundError(f"Script não encontrado: {script}")
+
+    tmp = tempfile.mkdtemp(prefix="syncvid_")
+    log_entries = []
+
+    try:
+        # ── 1. Parse do script ───────────────────────────────────────
+        lines = parse_script(script)
+        if not lines:
             raise ValueError("Script vazio ou inválido.")
-        log.info("Script carregado: %d falas", len(entries))
+        log.info("Script: %d falas carregadas", len(lines))
 
-        # 2 — Duração do vídeo
-        vid_dur = ffprobe_duration(cfg.video_path)
-        if cfg.preview_sec > 0:
-            vid_dur = min(vid_dur, float(cfg.preview_sec))
-            log.info("Modo preview: processando %.1fs", vid_dur)
-
-        # 3 — Extrair áudio original para detecção de silêncio
-        orig_audio = self._tmp("original_audio.wav")
-        t0 = cfg.preview_sec
-        preview_args = (["-t", str(cfg.preview_sec)] if cfg.preview_sec > 0 else [])
-        ffmpeg("-i", cfg.video_path, *preview_args, "-vn", "-ac", "1", "-ar", "16000", "-y", orig_audio)
-
-        # 4 — Determinar intervalos de fala
-        has_timestamps = any(e.start is not None for e in entries)
-        if has_timestamps:
-            intervals = [(e.start, e.end or (e.start + 4.0)) for e in entries]
-            log.info("Usando timestamps fornecidos pelo usuário.")
+        # ── 2. Extrair áudio original ────────────────────────────────
+        log.info("Extraindo áudio do vídeo...")
+        wav_orig = os.path.join(tmp, "original.wav")
+        if preview_s > 0:
+            _run(["ffmpeg", "-hide_banner", "-loglevel", "error",
+                  "-i", video, "-t", str(preview_s),
+                  "-vn", "-ac", "1", "-ar", "16000",
+                  "-acodec", "pcm_s16le", "-y", wav_orig])
         else:
-            log.info("Detectando intervalos de fala no áudio original...")
-            silences  = detect_silence(orig_audio, cfg.silence_db, cfg.silence_dur)
-            intervals = silence_to_speech(silences, vid_dur)
+            extract_audio(video, wav_orig)
+
+        vid_dur = _duration(video)
+        if preview_s > 0:
+            vid_dur = min(vid_dur, float(preview_s))
+
+        # ── 3. Detectar intervalos de fala ───────────────────────────
+        has_timestamps = any(l.start is not None for l in lines)
+
+        if has_timestamps:
+            intervals = [(l.start, l.end or (l.start + 5.0)) for l in lines]
+            log.info("Usando timestamps do script.")
+        else:
+            log.info("Detectando silêncios no áudio original...")
+            intervals = detect_speech_intervals(
+                wav_orig,
+                silence_thresh=int(silence_db),
+                min_silence_ms=int(silence_dur * 1000),
+            )
             log.info("Intervalos detectados: %d", len(intervals))
 
-            # Se a contagem não bate, avisar e distribuir uniformemente
-            if len(intervals) != len(entries):
+            if len(intervals) != len(lines):
                 log.warning(
-                    "Intervalos detectados (%d) ≠ falas no script (%d). "
-                    "Distribuindo uniformemente.", len(intervals), len(entries)
+                    "Intervalos (%d) ≠ falas (%d) → distribuição uniforme.",
+                    len(intervals), len(lines),
                 )
-                step = vid_dur / len(entries)
-                intervals = [(i * step, (i + 1) * step) for i in range(len(entries))]
+                step = vid_dur / len(lines)
+                intervals = [(i * step, (i+1) * step) for i in range(len(lines))]
 
-        # 5 — Gerar TTS e posicionar cada clip
-        audio_inputs  = []   # argumentos -i para ffmpeg
-        delay_filters = []   # adelay para posicionamento
-        mix_labels    = []
+        # ── 4. Gerar TTS + alinhar cada fala ─────────────────────────
+        audio_inputs, delay_filters, mix_labels = [], [], []
 
-        for idx, (entry, (t_start, t_end)) in enumerate(zip(entries, intervals)):
+        iterator = enumerate(zip(lines, intervals))
+        if HAS_TQDM:
+            iterator = enumerate(tqdm(list(zip(lines, intervals)), desc="Gerando TTS"))
+
+        for idx, (line, (t_start, t_end)) in iterator:
             target_dur = max(0.3, t_end - t_start)
-            log.info("[%d/%d] '%s' — '%.40s...' → %.2fs–%.2fs",
-                     idx+1, len(entries), entry.character, entry.text, t_start, t_end)
+            log.info(
+                "[%d/%d] %s → '%s' (%.2fs–%.2fs, alvo=%.2fs)",
+                idx+1, len(lines), line.character, line.text[:40],
+                t_start, t_end, target_dur,
+            )
 
             # Gerar TTS
-            raw_tts = self._tmp(f"tts_{idx:03d}_raw.mp3")
+            raw_mp3  = os.path.join(tmp, f"tts_{idx:03d}_raw.mp3")
+            final_mp3 = os.path.join(tmp, f"tts_{idx:03d}.mp3")
             try:
-                self.tts.generate(entry.text, raw_tts, voice=entry.voice)
+                generate_tts(line.text, raw_mp3, tts_engine, lang, line.voice)
             except Exception as exc:
-                log.error("Erro no TTS para '%s': %s", entry.character, exc)
-                raise
+                raise RuntimeError(f"TTS falhou para '{line.character}': {exc}")
 
-            tts_dur = ffprobe_duration(raw_tts)
-            log.info("  TTS gerado: %.2fs (alvo: %.2fs)", tts_dur, target_dur)
+            tts_dur = _duration(raw_mp3)
+            log.info("  TTS: %.2fs gerado (alvo: %.2fs)", tts_dur, target_dur)
 
             # Time-stretch se necessário
-            final_tts = self._tmp(f"tts_{idx:03d}_final.mp3")
-            if cfg.stretch and abs(tts_dur - target_dur) > 0.05:
+            if stretch and abs(tts_dur - target_dur) > 0.05:
                 try:
-                    stretch_audio(raw_tts, final_tts, target_dur)
-                    log.info("  Ajustado para %.2fs", target_dur)
+                    stretch_to_fit(raw_mp3, final_mp3, target_dur)
+                    log.info("  Ajustado para %.2fs", _duration(final_mp3))
                 except Exception as exc:
                     log.warning("  Stretch falhou (%s), usando sem ajuste.", exc)
-                    import shutil; shutil.copy(raw_tts, final_tts)
+                    shutil.copy(raw_mp3, final_mp3)
             else:
-                import shutil; shutil.copy(raw_tts, final_tts)
+                shutil.copy(raw_mp3, final_mp3)
 
-            # Registrar no log
-            self.logs.append({
+            log_entries.append({
                 "index": idx,
-                "character": entry.character,
-                "text": entry.text[:80],
-                "target_start": round(t_start, 3),
-                "target_end":   round(t_end, 3),
-                "tts_raw_dur":  round(tts_dur, 3),
-                "tts_final_dur": round(ffprobe_duration(final_tts), 3),
+                "character": line.character,
+                "text": line.text[:80],
+                "target_start_s": round(t_start, 3),
+                "target_end_s":   round(t_end, 3),
+                "tts_raw_s":      round(tts_dur, 3),
+                "tts_final_s":    round(_duration(final_mp3), 3),
             })
 
-            # Preparar para mistura
+            # Posicionar com adelay (em ms)
             delay_ms = int(t_start * 1000)
-            audio_inputs.extend(["-i", final_tts])
-            delay_filters.append(f"[{idx+1}:a]adelay={delay_ms}|{delay_ms}[a{idx}]")
+            audio_inputs.extend(["-i", final_mp3])
+            delay_filters.append(
+                f"[{idx+1}:a]adelay={delay_ms}|{delay_ms}[a{idx}]"
+            )
             mix_labels.append(f"[a{idx}]")
 
-        # 6 — Montar filter_complex e exportar
-        log.info("Montando trilha de áudio final...")
-        n_tts = len(entries)
-        filter_parts = delay_filters[:]
+        # ── 5. Montar filter_complex ──────────────────────────────────
+        n = len(lines)
+        fc_parts = delay_filters[:]
+        fc_parts.append(
+            f"{''.join(mix_labels)}amix=inputs={n}:duration=longest:normalize=0[tts_out]"
+        )
+        final_label = "[tts_out]"
 
-        # Misturar todos os clips TTS
-        tts_mix = f"{''.join(mix_labels)}amix=inputs={n_tts}:duration=longest:normalize=0[tts_mix]"
-        filter_parts.append(tts_mix)
-
-        # Música de fundo (opcional)
         bgm_inputs = []
-        final_label = "[tts_mix]"
-        bgm_idx = n_tts + 1  # índice no ffmpeg para o bgm
-
-        if cfg.bgm_path and os.path.exists(cfg.bgm_path):
-            bgm_inputs = ["-i", cfg.bgm_path]
-            bgm_vol = f"[{bgm_idx}:a]volume={cfg.bgm_volume}[bgm]"
-            bgm_mix = f"[tts_mix][bgm]amix=inputs=2:duration=first:normalize=0[final_a]"
-            filter_parts.extend([bgm_vol, bgm_mix])
+        if bgm and os.path.exists(bgm):
+            bgm_idx = n + 1
+            bgm_inputs = ["-i", bgm]
+            fc_parts.append(f"[{bgm_idx}:a]volume={bgm_vol:.3f}[bgm_v]")
+            fc_parts.append("[tts_out][bgm_v]amix=inputs=2:duration=first:normalize=0[final_a]")
             final_label = "[final_a]"
-            log.info("Música de fundo adicionada: volume=%.0f%%", cfg.bgm_volume * 100)
+            log.info("Música de fundo adicionada (volume=%.0f%%)", bgm_vol * 100)
 
-        filter_complex = ";".join(filter_parts)
+        filter_complex = ";".join(fc_parts)
 
-        # Preview: cortar o vídeo de entrada se necessário
-        input_args = []
-        if cfg.preview_sec > 0:
-            input_args = ["-t", str(cfg.preview_sec)]
+        # ── 6. Exportar vídeo final ───────────────────────────────────
+        log.info("Exportando vídeo final...")
+        preview_args = (["-t", str(preview_s)] if preview_s > 0 else [])
 
-        out_tmp = self._tmp("output_raw.mp4")
-        ffmpeg(
-            "-i", cfg.video_path,
+        tmp_out = os.path.join(tmp, "output.mp4")
+        _run([
+            "ffmpeg", "-hide_banner", "-loglevel", "error",
+            "-i", video,
             *audio_inputs,
             *bgm_inputs,
-            *input_args,
+            *preview_args,
             "-filter_complex", filter_complex,
             "-map", "0:v:0",
             "-map", final_label,
             "-c:v", "libx264", "-preset", "fast", "-crf", "22",
-            "-c:a", "aac", "-b:a", "128k",
+            "-c:a", "aac", "-b:a", "192k",
             "-shortest",
             "-async", "1",
-            "-y", out_tmp,
-            quiet=False,
-        )
+            "-y", tmp_out,
+        ], check=True)
 
-        # 7 — Mover para destino final
-        import shutil
-        if cfg.overwrite and os.path.exists(cfg.output_path):
-            os.remove(cfg.output_path)
-        shutil.move(out_tmp, cfg.output_path)
-        log.info("✅ Vídeo salvo: %s", cfg.output_path)
+        # Mover para destino
+        if os.path.exists(output):
+            os.remove(output)
+        shutil.move(tmp_out, output)
+        log.info("✅ Vídeo salvo: %s", output)
 
-        # 8 — Arquivo de log
-        if cfg.log_path:
-            with open(cfg.log_path, "w", encoding="utf-8") as f:
-                json.dump(self.logs, f, ensure_ascii=False, indent=2)
-            log.info("Log salvo: %s", cfg.log_path)
+        # ── 7. Salvar log ─────────────────────────────────────────────
+        if log_path:
+            with open(log_path, "w", encoding="utf-8") as f:
+                json.dump(log_entries, f, ensure_ascii=False, indent=2)
+            log.info("Log salvo: %s", log_path)
 
-        return cfg.output_path
+        return output
 
-    def cleanup(self):
-        import shutil
-        try:
-            shutil.rmtree(self.tmp, ignore_errors=True)
-        except Exception:
-            pass
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
-# ─── CLI ─────────────────────────────────────────────────────────────────────
-def build_parser() -> argparse.ArgumentParser:
+# ── CLI ────────────────────────────────────────────────────────────────────────
+def _check_deps():
+    # ffmpeg obrigatório
+    try:
+        subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True)
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        log.error("FFmpeg não encontrado. Baixe em https://ffmpeg.org")
+        sys.exit(1)
+
+    if not HAS_PYDUB:
+        log.warning("pydub não instalado (pip install pydub). Usando fallback ffmpeg para detecção de silêncio.")
+
+
+def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="sync_video.py",
         description="Sincroniza áudio TTS com vídeo para qualquer personagem.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
+Formatos de script suportados:
+  TXT  ->  Peixe: Oi, tudo bem?
+  JSON ->  [{"character":"Peixe","text":"Oi!","start":0.0,"end":3.0}]
+  CSV  ->  character,text,start,end
+  YAML ->  - character: Peixe / text: Oi!
+
 Exemplos:
-  python sync_video.py --video peixe.mp4 --script falas.json --output final.mp4
-  python sync_video.py --video input.mp4 --script falas.txt --output out.mp4 --tts gtts --lang pt
-  python sync_video.py --video input.mp4 --script falas.json --output out.mp4 --preview 5
-  python sync_video.py --video input.mp4 --script falas.json --output out.mp4 --bgm musica.mp3
-
-Formato JSON (com timestamps):
-  [
-    {"character": "Peixe",  "text": "Oi! Eu sou o peixinho!", "start": 0.0, "end": 3.5},
-    {"character": "Humano", "text": "Olá, peixe!",            "start": 4.0, "end": 6.0}
-  ]
-
-Formato JSON (simples, auto-detecta intervalos):
-  {"Peixe": "Oi! Eu sou o peixinho!", "Humano": "Olá, peixe!"}
-
-Formato TXT:
-  Peixe: Oi! Eu sou o peixinho!
-  Humano: Olá, peixe!
+  python sync_video.py --video peixe.mp4 --script falas.txt --output final.mp4
+  python sync_video.py --video v.mp4 --script f.json --output out.mp4 --tts gtts
+  python sync_video.py --video v.mp4 --script f.txt  --output out.mp4 --preview 5
+  python sync_video.py --video v.mp4 --script f.json --output out.mp4 --bgm music.mp3 --log timing.json
         """,
     )
-    p.add_argument("--video",   required=True,  help="Arquivo de vídeo de entrada (.mp4, .mkv, etc.)")
-    p.add_argument("--script",  required=True,  help="Script de falas (.json, .txt, .csv, .yaml)")
-    p.add_argument("--output",  required=True,  help="Arquivo de vídeo de saída")
-    p.add_argument("--tts",     default="edge", choices=["edge","gtts","auto"], help="Motor TTS (padrão: edge)")
-    p.add_argument("--lang",    default="pt",   help="Idioma para TTS (padrão: pt)")
-    p.add_argument("--bgm",     default=None,   help="Arquivo de música de fundo (opcional)")
-    p.add_argument("--bgm-vol", default=0.15,   type=float, help="Volume da música de fundo 0-1 (padrão: 0.15)")
-    p.add_argument("--preview", default=0,      type=int,   help="Gerar preview de N segundos (0 = completo)")
-    p.add_argument("--no-stretch", action="store_true",     help="Desativar time-stretch do TTS")
-    p.add_argument("--log",     default=None,   help="Salvar log de sincronização em arquivo JSON")
-    p.add_argument("--silence-db",  default=-35.0, type=float, help="Threshold de silêncio em dB (padrão: -35)")
-    p.add_argument("--silence-dur", default=0.3,   type=float, help="Duração mínima do silêncio em s (padrão: 0.3)")
-    p.add_argument("--verbose", action="store_true", help="Modo verbose (debug)")
+    p.add_argument("--video",        required=True,           help="Vídeo de entrada")
+    p.add_argument("--script",       required=True,           help="Script de falas (.txt/.json/.csv/.yaml)")
+    p.add_argument("--output",       required=True,           help="Vídeo de saída")
+    p.add_argument("--tts",          default="edge",          choices=["edge","gtts"], help="Motor TTS (padrão: edge)")
+    p.add_argument("--lang",         default="pt",            help="Idioma TTS (padrão: pt)")
+    p.add_argument("--bgm",          default=None,            help="Música de fundo (opcional)")
+    p.add_argument("--bgm-vol",      default=0.15, type=float,help="Volume da música 0-1 (padrão: 0.15)")
+    p.add_argument("--preview",      default=0,    type=int,  help="Processar apenas N segundos (0 = tudo)")
+    p.add_argument("--no-stretch",   action="store_true",     help="Desativar ajuste de duração do TTS")
+    p.add_argument("--silence-db",   default=-38.0,type=float,help="Limiar de silêncio em dB (padrão: -38)")
+    p.add_argument("--silence-dur",  default=0.3,  type=float,help="Duração mínima do silêncio em s (padrão: 0.3)")
+    p.add_argument("--log",          default=None,            help="Salvar log de timing em JSON")
+    p.add_argument("--verbose",      action="store_true",     help="Modo verbose")
     return p
 
 
-def check_ffmpeg():
-    try:
-        subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True)
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        log.error("FFmpeg não encontrado. Instale em: https://ffmpeg.org/download.html")
-        sys.exit(1)
-
-
 def main():
-    parser = build_parser()
+    parser = _build_parser()
     args   = parser.parse_args()
 
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
-    check_ffmpeg()
+    _check_deps()
 
-    cfg = SyncConfig(
-        video_path  = args.video,
-        script_path = args.script,
-        output_path = args.output,
-        tts_engine  = args.tts,
-        language    = args.lang,
-        bgm_path    = args.bgm,
-        bgm_volume  = args.bgm_vol,
-        preview_sec = args.preview,
-        stretch     = not args.no_stretch,
-        log_path    = args.log,
-        silence_db  = args.silence_db,
-        silence_dur = args.silence_dur,
-    )
-
-    engine = SyncEngine(cfg)
     t0 = time.time()
     try:
-        out = engine.run()
-        elapsed = time.time() - t0
-        log.info("Concluído em %.1fs → %s", elapsed, out)
+        out = sync_video(
+            video      = args.video,
+            script     = args.script,
+            output     = args.output,
+            tts_engine = args.tts,
+            lang       = args.lang,
+            bgm        = args.bgm,
+            bgm_vol    = args.bgm_vol,
+            preview_s  = args.preview,
+            stretch    = not args.no_stretch,
+            silence_db = args.silence_db,
+            silence_dur= args.silence_dur,
+            log_path   = args.log,
+        )
+        log.info("Concluído em %.1fs → %s", time.time() - t0, out)
     except FileNotFoundError as e:
-        log.error("Arquivo não encontrado: %s", e)
-        sys.exit(2)
+        log.error("%s", e); sys.exit(2)
     except RuntimeError as e:
-        log.error("Erro de processamento: %s", e)
-        sys.exit(3)
+        log.error("%s", e); sys.exit(3)
     except KeyboardInterrupt:
-        log.info("Interrompido pelo usuário.")
-        sys.exit(0)
-    finally:
-        engine.cleanup()
+        log.info("Interrompido."); sys.exit(0)
 
 
 if __name__ == "__main__":
