@@ -171,7 +171,7 @@ def serve_subtitle():
     return resp
 
 
-# ── VideoFala: gerar vídeo com narração IA ───────────────────────────
+# ── VideoFala: gerar vídeo com voz sincronizada ──────────────────────
 @app.route('/api/gerar', methods=['POST'])
 def api_gerar():
     import subprocess, tempfile
@@ -182,76 +182,86 @@ def api_gerar():
     if not texto:
         return jsonify({'erro': 'Texto não pode estar vazio'}), 400
     if not video:
-        return jsonify({'erro': 'Envie um arquivo de vídeo .mp4'}), 400
+        return jsonify({'erro': 'Envie um arquivo de vídeo'}), 400
 
-    tmp        = tempfile.gettempdir()
-    video_in   = os.path.join(tmp, f'vf_in_{uuid.uuid4().hex}.mp4')
-    audio_path = os.path.join(tmp, f'vf_audio_{uuid.uuid4().hex}.mp3')
-    video_out  = os.path.join(tmp, f'vf_out_{uuid.uuid4().hex}.mp4')
+    tmp        = tempfile.mkdtemp(prefix='vf_')
+    video_in   = os.path.join(tmp, 'input.mp4')
+    video_norm = os.path.join(tmp, 'normalized.mp4')
+    audio_path = os.path.join(tmp, 'audio.mp3')
+    audio_wav  = os.path.join(tmp, 'audio.wav')
+    video_out  = os.path.join(tmp, 'output.mp4')
     tts_script = os.path.join(os.path.dirname(BASE_DIR), 'tts.py')
 
     try:
-        # usa exatamente o texto do usuário — sem reescrita
-        texto_gerado = texto
-
-        # 1 — Salvar vídeo e gerar áudio com edge-tts
-        print('[VideoFala 1/2] Gerando áudio com edge-tts...')
         video.save(video_in)
+
+        # 1 — Normalizar PTS do vídeo (resolve dessincronização de origem)
+        print('[VozVideo 1/3] Normalizando vídeo...')
+        subprocess.run([
+            'ffmpeg', '-hide_banner', '-loglevel', 'error', '-y',
+            '-i', video_in,
+            '-c:v', 'libx264', '-preset', 'fast', '-crf', '22',
+            '-c:a', 'copy',
+            '-vf', 'setpts=PTS-STARTPTS',
+            '-af', 'asetpts=PTS-STARTPTS',
+            '-fflags', '+genpts',
+            video_norm,
+        ], check=True, timeout=120)
+
+        # 2 — Gerar áudio TTS
+        print('[VozVideo 2/3] Gerando voz com edge-tts...')
         proc = subprocess.run(
-            [sys.executable, tts_script, texto_gerado, audio_path],
-            capture_output=True,
-            encoding='utf-8',
-            errors='replace',
-            timeout=60
+            [sys.executable, tts_script, texto, audio_path],
+            capture_output=True, encoding='utf-8', errors='replace', timeout=60
         )
         if proc.returncode != 0:
             raise RuntimeError(f'edge-tts falhou: {proc.stderr}')
 
-        # 2 — Juntar vídeo + áudio com ffmpeg (reencoda para garantir sync)
-        print('[VideoFala 2/2] Juntando com ffmpeg...')
-        ffmpeg_proc = subprocess.run(
-            [
-                'ffmpeg', '-y',
-                '-i', video_in,
-                '-i', audio_path,
-                '-map', '0:v:0',
-                '-map', '1:a:0',
-                '-c:v', 'libx264', '-preset', 'fast', '-crf', '22',
-                '-c:a', 'aac', '-b:a', '128k',
-                '-shortest',
-                '-async', '1',
-                '-vsync', '1',
-                video_out,
-            ],
-            capture_output=True, text=True, timeout=180
-        )
-        if ffmpeg_proc.returncode != 0:
-            raise RuntimeError(f'ffmpeg falhou: {ffmpeg_proc.stderr[-400:]}')
+        # Converter MP3 → WAV 44100hz para evitar problemas de sample rate
+        subprocess.run([
+            'ffmpeg', '-hide_banner', '-loglevel', 'error', '-y',
+            '-i', audio_path, '-ar', '44100', '-ac', '2', audio_wav,
+        ], check=True, timeout=30)
 
-        # Serve o arquivo e apaga depois
-        print(f'[VideoFala] Concluído: {video_out}')
+        # 3 — Juntar: vídeo normalizado + áudio TTS
+        # filter_complex garante que ambos começam exatamente em t=0
+        print('[VozVideo 3/3] Sincronizando áudio + vídeo...')
+        subprocess.run([
+            'ffmpeg', '-hide_banner', '-loglevel', 'error', '-y',
+            '-i', video_norm,
+            '-i', audio_wav,
+            '-filter_complex',
+            '[0:v]setpts=PTS-STARTPTS[v];'
+            '[1:a]asetpts=PTS-STARTPTS,aresample=44100[a]',
+            '-map', '[v]',
+            '-map', '[a]',
+            '-c:v', 'libx264', '-preset', 'fast', '-crf', '22',
+            '-c:a', 'aac', '-b:a', '128k',
+            '-shortest',
+            video_out,
+        ], check=True, timeout=300)
 
-        def remover_depois(path):
-            import time; time.sleep(60)
-            try: os.remove(path)
-            except: pass
+        print(f'[VozVideo] OK: {video_out}')
 
-        threading.Thread(target=remover_depois, args=(video_out,), daemon=True).start()
+        def _rm(p):
+            import time, shutil; time.sleep(120)
+            shutil.rmtree(p, ignore_errors=True)
+
+        threading.Thread(target=_rm, args=(tmp,), daemon=True).start()
 
         resp = send_file(video_out, mimetype='video/mp4',
-                         as_attachment=True, download_name='video_final.mp4')
-        resp.headers['X-Texto-Gerado'] = texto_gerado
+                         as_attachment=True, download_name='vozvideo.mp4')
+        resp.headers['X-Texto-Gerado'] = texto
         resp.headers['Access-Control-Expose-Headers'] = 'X-Texto-Gerado'
         return resp
 
+    except subprocess.CalledProcessError as e:
+        import shutil; shutil.rmtree(tmp, ignore_errors=True)
+        return jsonify({'erro': f'Processamento falhou: {e}'}), 500
     except Exception as e:
-        print(f'[VideoFala] ERRO: {e}')
+        import shutil; shutil.rmtree(tmp, ignore_errors=True)
+        print(f'[VozVideo] ERRO: {e}')
         return jsonify({'erro': str(e)}), 500
-    finally:
-        for p in [video_in, audio_path]:
-            try:
-                if os.path.exists(p): os.remove(p)
-            except: pass
 
 
 
