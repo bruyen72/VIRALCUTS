@@ -1,0 +1,2692 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ViralCuts — AI Shorts Generator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        :root {
+            --bg-base: #030306;
+            --bg-surface: #0d0d14;
+            --bg-surface2: #13131e;
+            --border: rgba(255,255,255,0.06);
+            --purple: #7c3aed;
+            --purple-light: #a855f7;
+            --blue: #2563eb;
+            --blue-light: #60a5fa;
+            --pink: #ec4899;
+            --neon-purple: rgba(168,85,247,0.5);
+            --neon-blue: rgba(96,165,250,0.4);
+        }
+        body { font-family: 'Inter', sans-serif; background: var(--bg-base); color: #e2e8f0; overflow: hidden; }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(168,85,247,0.3); border-radius: 99px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(168,85,247,0.6); }
+
+        /* Grid background */
+        .grid-bg {
+            background-image: linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+            background-size: 32px 32px;
+        }
+
+        /* Glow effects */
+        .glow-purple { box-shadow: 0 0 30px rgba(168,85,247,0.4), 0 0 60px rgba(168,85,247,0.15); }
+        .glow-purple-sm { box-shadow: 0 0 15px rgba(168,85,247,0.35); }
+        .glow-blue { box-shadow: 0 0 30px rgba(96,165,250,0.3); }
+        .text-glow { text-shadow: 0 0 20px rgba(168,85,247,0.7); }
+
+        /* Glassmorphism */
+        .glass { background: rgba(13,13,20,0.8); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid var(--border); }
+        .glass-hover { transition: all 0.3s ease; }
+        .glass-hover:hover { background: rgba(20,20,32,0.9); border-color: rgba(168,85,247,0.25); }
+
+        /* Gradient border */
+        .grad-border { position: relative; }
+        .grad-border::before { content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1px; background: linear-gradient(135deg, rgba(168,85,247,0.4), rgba(96,165,250,0.2), transparent); -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude; pointer-events: none; }
+
+        /* Animations */
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes spin-slow { to { transform: rotate(360deg); } }
+        @keyframes spin-reverse { to { transform: rotate(-360deg); } }
+        @keyframes pulse-ring { 0%,100% { transform: scale(1); opacity: 0.5; } 50% { transform: scale(1.08); opacity: 1; } }
+        @keyframes shimmer { from { background-position: -200% center; } to { background-position: 200% center; } }
+        @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+        @keyframes neon-pulse { 0%,100% { box-shadow: 0 0 20px rgba(168,85,247,0.4); } 50% { box-shadow: 0 0 40px rgba(168,85,247,0.7), 0 0 80px rgba(168,85,247,0.2); } }
+        @keyframes score-fill { from { width: 0%; } to { } }
+        @keyframes waveform { 0%,100% { transform: scaleY(1); } 50% { transform: scaleY(0.3); } }
+        @keyframes progress-glow { 0%,100% { text-shadow: 0 0 20px rgba(168,85,247,0.8); } 50% { text-shadow: 0 0 40px rgba(168,85,247,1), 0 0 60px rgba(96,165,250,0.5); } }
+        @keyframes border-rotate { to { --angle: 360deg; } }
+        @keyframes drop-bounce { 0%,100% { transform: translateY(0); } 60% { transform: translateY(-12px); } }
+
+        .anim-fade-up { animation: fadeInUp 0.5s ease both; }
+        .anim-fade { animation: fadeIn 0.4s ease both; }
+        .spin-slow { animation: spin-slow 5s linear infinite; }
+        .spin-reverse { animation: spin-reverse 3.5s linear infinite; }
+        .spin-fast { animation: spin-slow 1.2s linear infinite; }
+        .float-anim { animation: float 3s ease-in-out infinite; }
+        .neon-pulse { animation: neon-pulse 2s ease-in-out infinite; }
+        .progress-glow { animation: progress-glow 1.5s ease-in-out infinite; }
+
+        .shimmer-text {
+            background: linear-gradient(90deg, #a855f7, #60a5fa, #ec4899, #a855f7);
+            background-size: 200% auto;
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: shimmer 3s linear infinite;
+        }
+
+        /* Waveform bars */
+        .wave-bar { display: inline-block; width: 3px; background: linear-gradient(to top, #7c3aed, #a855f7); border-radius: 2px; margin: 0 1px; animation: waveform 1.2s ease-in-out infinite; }
+        .wave-bar:nth-child(2n) { animation-delay: 0.15s; }
+        .wave-bar:nth-child(3n) { animation-delay: 0.3s; }
+        .wave-bar:nth-child(4n) { animation-delay: 0.45s; }
+        .wave-bar:nth-child(5n) { animation-delay: 0.6s; }
+
+        /* Navigation */
+        .nav-active { background: rgba(124,58,237,0.15) !important; color: white !important; box-shadow: inset 3px 0 0 #a855f7; }
+        .nav-active .nav-icon { color: #a855f7 !important; }
+        .nav-item { transition: all 0.2s ease; }
+        .nav-item:hover { background: rgba(255,255,255,0.03); color: #e2e8f0; }
+
+        /* View sections */
+        .view-section { display: none; }
+        .view-section.active { display: flex; }
+        .tab-section { display: none; }
+        .tab-section.active { display: flex; }
+
+        /* Upload zone */
+        .upload-zone { border: 2px dashed rgba(168,85,247,0.25); transition: all 0.35s ease; }
+        .upload-zone:hover, .upload-zone.drag-over { border-color: rgba(168,85,247,0.7); background: rgba(124,58,237,0.08); box-shadow: 0 0 40px rgba(168,85,247,0.15) inset; }
+
+        /* Score ring */
+        .score-ring { stroke-dasharray: 251; stroke-dashoffset: 251; transition: stroke-dashoffset 1.2s ease; stroke-linecap: round; transform-origin: center; transform: rotate(-90deg); }
+
+        /* Phone mockup glow */
+        .phone-glow { box-shadow: 0 0 0 1px rgba(255,255,255,0.08), 0 30px 80px rgba(0,0,0,0.6), 0 0 40px rgba(124,58,237,0.2); }
+
+        /* Timeline track */
+        .timeline-track { position: relative; height: 48px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; overflow: hidden; cursor: pointer; }
+        .timeline-track:hover { border-color: rgba(168,85,247,0.3); }
+        .timeline-fill { height: 100%; background: linear-gradient(90deg, rgba(124,58,237,0.4), rgba(96,165,250,0.3)); border-radius: 8px; transition: width 0.3s ease; }
+
+        /* Step pills */
+        .step-pill { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 12px; font-size: 13px; font-weight: 600; transition: all 0.3s; }
+        .step-pill.done { background: rgba(16,185,129,0.1); color: #10b981; border: 1px solid rgba(16,185,129,0.2); }
+        .step-pill.active { background: rgba(124,58,237,0.15); color: #a855f7; border: 1px solid rgba(168,85,247,0.3); }
+        .step-pill.pending { background: rgba(255,255,255,0.02); color: #64748b; border: 1px solid rgba(255,255,255,0.05); }
+
+        /* Card hover lift */
+        .card-lift { transition: transform 0.25s ease, box-shadow 0.25s ease; }
+        .card-lift:hover { transform: translateY(-3px); box-shadow: 0 16px 40px rgba(0,0,0,0.4), 0 0 20px rgba(168,85,247,0.1); }
+
+        /* Toggle */
+        .toggle-bg { transition: background 0.3s; }
+        .toggle-dot { transition: transform 0.3s; }
+
+        /* Subtitle overlay */
+        .subtitle-block { font-family: 'Inter', sans-serif; font-weight: 900; text-transform: uppercase; letter-spacing: 0.02em; }
+
+        /* Viral badge */
+        .viral-badge { background: linear-gradient(135deg, #f59e0b, #ef4444); font-size: 9px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; color: white; }
+
+        /* Timeline tool buttons */
+        .timeline-tool-btn { width:28px; height:28px; display:flex; align-items:center; justify-content:center; border-radius:8px; color:#64748b; transition:all 0.15s; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); }
+        .timeline-tool-btn:hover { background:rgba(255,255,255,0.08); color:#e2e8f0; }
+
+        /* ── Viral subtitle styles (12 total) ──────────────── */
+        .subtitle-block { line-height:1.2; letter-spacing:0.04em; }
+
+        @keyframes sub-glitch {
+            0%,100%{text-shadow:2px 0 #ff0080,-2px 0 #00ffff,0 2px #000;}
+            25%{text-shadow:-3px 0 #ff0080,3px 0 #00ffff;}
+            50%{text-shadow:3px 0 #ff0080,-3px 0 #00ffff,0 -2px #000;}
+            75%{text-shadow:-2px 0 #ff0080,2px 0 #00ffff;}
+        }
+        @keyframes sub-pulse {
+            0%,100%{opacity:1;transform:scale(1);}
+            50%{opacity:0.85;transform:scale(1.04);}
+        }
+        @keyframes sub-shake {
+            0%,100%{transform:translateX(0);}
+            20%{transform:translateX(-2px);}
+            40%{transform:translateX(2px);}
+            60%{transform:translateX(-1px);}
+            80%{transform:translateX(1px);}
+        }
+
+        /* 0 — Classic White (TikTok padrão) */
+        .sub-white{color:#fff;font-weight:900;text-transform:uppercase;-webkit-text-stroke:1.5px #000;text-shadow:2px 2px 0 #000,-2px 2px 0 #000,2px -2px 0 #000,-2px -2px 0 #000,0 4px 12px rgba(0,0,0,0.9);font-size:1.05rem;}
+        /* 1 — Hormozi Yellow (mais viral do YouTube) */
+        .sub-yellow{color:#fbbf24;font-weight:900;text-transform:uppercase;-webkit-text-stroke:1.5px #000;text-shadow:2px 2px 0 #000,-2px 2px 0 #000,2px -2px 0 #000,-2px -2px 0 #000,0 4px 16px rgba(0,0,0,1);font-size:1.1rem;}
+        /* 2 — Black Box (podcast) */
+        .sub-box{background:rgba(0,0,0,0.88);color:#fff;font-weight:900;text-transform:uppercase;padding:4px 10px;border-radius:4px;font-size:0.95rem;border-left:3px solid #a855f7;}
+        /* 3 — Neon Purple (gaming) */
+        .sub-neon{color:#e879f9;font-weight:900;text-transform:uppercase;text-shadow:0 0 8px #a855f7,0 0 20px rgba(168,85,247,0.7),0 0 40px rgba(168,85,247,0.3),2px 2px 0 #000;font-size:1.05rem;}
+        /* 4 — Fire Gradient (hype) */
+        .sub-fire{background:linear-gradient(135deg,#fbbf24 0%,#f97316 40%,#ef4444 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;font-weight:900;text-transform:uppercase;font-size:1.1rem;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.9));}
+        /* 5 — Cinema Outline (reels) */
+        .sub-outline{color:#fff;font-weight:900;text-transform:uppercase;font-size:1.15rem;letter-spacing:0.06em;text-shadow:-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000,-3px 0 0 #000,3px 0 0 #000,0 -3px 0 #000,0 3px 0 #000,0 6px 20px rgba(0,0,0,0.8);}
+        /* 6 — 3D Pop (blue shadow) */
+        .sub-3d{color:#fff;font-weight:900;text-transform:uppercase;font-size:1.1rem;text-shadow:1px 1px 0 #1e40af,2px 2px 0 #1e3a8a,3px 3px 0 #1e3a8a,4px 4px 0 rgba(0,0,0,0.4),0 0 20px rgba(96,165,250,0.3);}
+        /* 7 — Pink Viral (Instagram) */
+        .sub-pink{color:#f472b6;font-weight:900;text-transform:uppercase;-webkit-text-stroke:1.5px #000;text-shadow:0 0 10px rgba(244,114,182,0.6),2px 2px 0 #000,-2px 2px 0 #000,0 4px 12px rgba(0,0,0,0.8);font-size:1.1rem;}
+        /* 8 — Matrix Green (hacker) */
+        .sub-matrix{color:#00ff41;font-family:'Courier New',monospace;font-weight:700;text-transform:uppercase;text-shadow:0 0 6px #00ff41,0 0 15px rgba(0,255,65,0.5),0 2px 8px rgba(0,0,0,0.9);font-size:1rem;letter-spacing:0.08em;background:rgba(0,0,0,0.7);padding:3px 8px;border-radius:2px;border:1px solid rgba(0,255,65,0.3);}
+        /* 9 — Gold Luxury */
+        .sub-gold{background:linear-gradient(135deg,#fef08a,#fbbf24,#f59e0b,#d97706);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;font-weight:900;text-transform:uppercase;font-size:1.1rem;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.9)) drop-shadow(0 0 12px rgba(251,191,36,0.4));}
+        /* 10 — Glitch (viral tech) */
+        .sub-glitch{color:#fff;font-weight:900;text-transform:uppercase;font-size:1.05rem;animation:sub-glitch 0.4s steps(1) infinite;-webkit-text-stroke:1px #000;}
+        /* 11 — Bounce Pop (divertido) */
+        .sub-bounce{color:#fff;font-weight:900;text-transform:uppercase;font-size:1.1rem;-webkit-text-stroke:2px #000;text-shadow:0 4px 0 rgba(0,0,0,0.5);animation:sub-shake 0.5s ease-in-out infinite;display:inline-block;}
+
+        /* Sub style btn active */
+        .sub-style-btn.active-style { border:2px solid #7c3aed !important; box-shadow:0 0 12px rgba(124,58,237,0.3) !important; }
+        .sub-style-btn { transition:all 0.2s; }
+        .sub-style-btn:hover { opacity:0.85; }
+
+        /* Sub block active highlight */
+        .sub-block.sub-active { background:rgba(124,58,237,0.12) !important; border-color:rgba(168,85,247,0.4) !important; }
+
+        /* Burned-sub cover: opaque block inserted by JS when clip has burned subs */
+        #burned-sub-cover {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            height: 62px;
+            background: rgba(0,0,0,0.97);
+            z-index: 19;          /* below JS overlay (z-20), above video */
+            pointer-events: none;
+        }
+
+        /* Timeline drag visual feedback */
+        .tl-dragging #timeline-progress-bar { transition: none !important; }
+        .tl-dragging #timeline-playhead      { opacity: 0.8; }
+    </style>
+</head>
+
+<body class="flex flex-col h-screen overflow-hidden select-none">
+
+<!-- ─────────── TITLEBAR (Electron only) ─────────── -->
+<div id="titlebar" class="hidden h-9 shrink-0 flex items-center justify-between px-4 z-[200]" style="background:#050508; border-bottom:1px solid rgba(255,255,255,0.04); -webkit-app-region:drag;">
+    <div class="flex items-center gap-2" style="-webkit-app-region:no-drag;">
+        <div class="w-5 h-5 rounded-md flex items-center justify-center" style="background:linear-gradient(135deg,#2563eb,#7c3aed);">
+            <i data-lucide="scissors" class="w-3 h-3 text-white"></i>
+        </div>
+        <span class="text-xs font-bold text-slate-400">ViralCuts</span>
+    </div>
+    <div class="flex items-center gap-1" style="-webkit-app-region:no-drag;">
+        <button onclick="window.electronAPI?.minimize()" class="w-7 h-7 flex items-center justify-center rounded text-slate-500 hover:text-white hover:bg-white/10 transition text-xs">─</button>
+        <button onclick="window.electronAPI?.maximize()" id="btn-max" class="w-7 h-7 flex items-center justify-center rounded text-slate-500 hover:text-white hover:bg-white/10 transition text-xs">□</button>
+        <button onclick="window.electronAPI?.close()" class="w-7 h-7 flex items-center justify-center rounded text-slate-500 hover:text-white hover:bg-red-600/80 transition text-xs">✕</button>
+    </div>
+</div>
+
+<div class="flex flex-1 overflow-hidden">
+
+<!-- ─────────── SIDEBAR ─────────── -->
+<aside id="sidebar" class="w-[72px] lg:w-64 flex flex-col justify-between transition-all duration-300 z-50 shrink-0" style="background:#0a0a10; border-right:1px solid var(--border);">
+    <div>
+        <!-- Logo -->
+        <div class="h-[60px] flex items-center justify-center lg:justify-start lg:px-5 cursor-pointer shrink-0" style="border-bottom:1px solid var(--border);" onclick="switchTab('projects')">
+            <div class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 glow-purple-sm" style="background:linear-gradient(135deg,#2563eb,#7c3aed);">
+                <i data-lucide="scissors" class="w-4 h-4 text-white"></i>
+            </div>
+            <div class="ml-3 hidden lg:block">
+                <span class="font-black text-lg text-white tracking-tight">Viral<span class="shimmer-text">Cuts</span></span>
+                <div class="text-[10px] text-slate-500 font-medium tracking-wider uppercase">AI Shorts Studio</div>
+            </div>
+        </div>
+
+        <!-- Nav -->
+        <nav class="p-3 space-y-1 mt-2">
+            <button onclick="switchTab('projects')" id="nav-projects" class="nav-item nav-active w-full flex items-center justify-center lg:justify-start lg:px-4 py-3 rounded-xl text-slate-400 gap-3">
+                <i data-lucide="layout-grid" class="nav-icon w-5 h-5 shrink-0 text-purple-400"></i>
+                <span class="hidden lg:block text-sm font-semibold text-white">Meus Projetos</span>
+            </button>
+            <button onclick="switchTab('templates')" id="nav-templates" class="nav-item w-full flex items-center justify-center lg:justify-start lg:px-4 py-3 rounded-xl text-slate-400 gap-3">
+                <i data-lucide="layout-template" class="nav-icon w-5 h-5 shrink-0"></i>
+                <span class="hidden lg:block text-sm font-semibold">Templates</span>
+            </button>
+            <button onclick="switchTab('api')" id="nav-api" class="nav-item w-full flex items-center justify-center lg:justify-start lg:px-4 py-3 rounded-xl text-slate-400 gap-3">
+                <i data-lucide="key" class="nav-icon w-5 h-5 shrink-0"></i>
+                <span class="hidden lg:block text-sm font-semibold">APIs Gratuitas</span>
+            </button>
+            <button onclick="switchTab('videofala')" id="nav-videofala" class="nav-item w-full flex items-center justify-center lg:justify-start lg:px-4 py-3 rounded-xl text-slate-400 gap-3">
+                <i data-lucide="video" class="nav-icon w-5 h-5 shrink-0"></i>
+                <span class="hidden lg:block text-sm font-semibold">VideoFala IA</span>
+            </button>
+        </nav>
+    </div>
+
+    <div class="p-3 space-y-1">
+        <button onclick="switchTab('settings')" id="nav-settings" class="nav-item w-full flex items-center justify-center lg:justify-start lg:px-4 py-3 rounded-xl text-slate-400 gap-3">
+            <i data-lucide="settings" class="nav-icon w-5 h-5 shrink-0"></i>
+            <span class="hidden lg:block text-sm font-semibold">Configurações</span>
+        </button>
+        <!-- User pill -->
+        <div class="hidden lg:flex items-center gap-3 p-3 rounded-xl mt-2" style="background:rgba(255,255,255,0.03); border:1px solid var(--border);">
+            <div class="w-8 h-8 rounded-full shrink-0 overflow-hidden" style="background:linear-gradient(135deg,#2563eb,#7c3aed);">
+                <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" class="w-full h-full object-cover" alt="avatar"/>
+            </div>
+            <div class="min-w-0">
+                <div class="text-sm font-semibold text-white truncate">Felix Creator</div>
+            </div>
+        </div>
+    </div>
+</aside>
+
+<!-- ─────────── MAIN ─────────── -->
+<main class="flex-1 flex flex-col min-w-0 overflow-hidden" style="background:var(--bg-base);">
+
+    <!-- TOPBAR -->
+    <header class="h-[60px] shrink-0 flex items-center justify-between px-6 z-40" style="background:rgba(10,10,16,0.7); backdrop-filter:blur(20px); border-bottom:1px solid var(--border);">
+        <div id="breadcrumb" class="flex items-center gap-2 text-sm">
+            <span class="text-slate-500 font-medium">Workspace</span>
+            <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-slate-600"></i>
+            <span id="header-title" class="text-purple-400 font-bold">Novo Projeto</span>
+        </div>
+        <div class="flex items-center gap-4">
+            <button id="btn-new-video" onclick="setStep('upload')" class="hidden px-4 py-1.5 rounded-lg text-sm font-semibold text-white transition" style="background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.1);">+ Novo Vídeo</button>
+            <button class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white transition" style="background:rgba(255,255,255,0.04);">
+                <i data-lucide="bell" class="w-4 h-4"></i>
+            </button>
+            <div class="w-8 h-8 rounded-full overflow-hidden cursor-pointer" style="background:linear-gradient(135deg,#2563eb,#7c3aed); padding:1.5px;">
+                <div class="w-full h-full rounded-full overflow-hidden" style="background:#0a0a10;">
+                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" class="w-full h-full object-cover" alt="avatar"/>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- ══════════════════ PROJECTS TAB ══════════════════ -->
+    <div id="tab-projects" class="tab-section active flex-1 overflow-hidden relative">
+
+        <!-- ── UPLOAD STEP ── -->
+        <div id="step-upload" class="view-section active absolute inset-0 flex-col items-center justify-center p-6 overflow-y-auto anim-fade-up">
+            <div class="grid-bg absolute inset-0 pointer-events-none opacity-50"></div>
+            <!-- Ambient blobs -->
+            <div class="absolute top-[-10%] left-[20%] w-[500px] h-[500px] rounded-full pointer-events-none" style="background:radial-gradient(circle,rgba(124,58,237,0.08),transparent 70%);"></div>
+            <div class="absolute bottom-0 right-[10%] w-[400px] h-[400px] rounded-full pointer-events-none" style="background:radial-gradient(circle,rgba(37,99,235,0.06),transparent 70%);"></div>
+
+            <div class="relative z-10 w-full max-w-5xl">
+                <!-- Title -->
+                <div class="text-center mb-8 anim-fade-up" style="animation-delay:0.05s;">
+                    <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest mb-4" style="background:rgba(168,85,247,0.1); border:1px solid rgba(168,85,247,0.2); color:#a855f7;">
+                        <i data-lucide="sparkles" class="w-3 h-3"></i> IA Multi-Modal Avançada
+                    </div>
+                    <h1 class="text-4xl lg:text-5xl font-black text-white tracking-tight mb-3">
+                        Transforme vídeos em <span class="shimmer-text">Shorts Virais</span>
+                    </h1>
+                    <p class="text-slate-400 text-base max-w-lg mx-auto">Uploads de até 4 horas. Recortes automáticos com IA em minutos.</p>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 anim-fade-up" style="animation-delay:0.1s;">
+                    <!-- Drop zone -->
+                    <div id="dropzone" class="upload-zone lg:col-span-2 rounded-2xl flex flex-col items-center justify-center p-10 cursor-pointer relative overflow-hidden group" style="min-height:320px; background:rgba(13,13,20,0.7);">
+                        <video id="preview-video" class="hidden absolute inset-0 w-full h-full object-cover opacity-40 blur-sm" muted loop autoplay playsinline></video>
+                        <div id="upload-ui" class="relative z-10 flex flex-col items-center pointer-events-none">
+                            <div class="w-20 h-20 rounded-2xl mb-5 flex items-center justify-center float-anim" style="background:rgba(124,58,237,0.12); border:1px solid rgba(168,85,247,0.2);">
+                                <i data-lucide="upload-cloud" class="w-9 h-9 text-purple-400"></i>
+                            </div>
+                            <h2 class="text-2xl font-black text-white mb-2">Arraste o vídeo aqui</h2>
+                            <p class="text-slate-400 text-sm text-center max-w-xs mb-6">MP4, MOV, AVI, MKV — até 4GB</p>
+                            <div class="flex items-center gap-3">
+                                <button class="px-6 py-2.5 rounded-xl text-white text-sm font-bold pointer-events-auto transition" style="background:rgba(124,58,237,0.25); border:1px solid rgba(168,85,247,0.35);">
+                                    Procurar arquivo
+                                </button>
+                                <span class="text-slate-600 text-sm">ou cole um link</span>
+                            </div>
+                        </div>
+                        <div id="file-info" class="hidden relative z-10 flex flex-col items-center gap-3">
+                            <div class="w-16 h-16 rounded-2xl flex items-center justify-center" style="background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.3);">
+                                <i data-lucide="check-circle-2" class="w-8 h-8 text-emerald-400"></i>
+                            </div>
+                            <div class="text-center">
+                                <p id="file-name" class="text-white font-bold text-base"></p>
+                                <p id="file-size" class="text-slate-400 text-sm mt-1"></p>
+                            </div>
+                            <!-- Waveform decoration -->
+                            <div class="flex items-end gap-[2px] h-10 mt-2">
+                                <div class="wave-bar" style="height:60%"></div><div class="wave-bar" style="height:80%"></div><div class="wave-bar" style="height:45%"></div><div class="wave-bar" style="height:95%"></div><div class="wave-bar" style="height:60%"></div><div class="wave-bar" style="height:75%"></div><div class="wave-bar" style="height:40%"></div><div class="wave-bar" style="height:85%"></div><div class="wave-bar" style="height:65%"></div><div class="wave-bar" style="height:50%"></div><div class="wave-bar" style="height:90%"></div><div class="wave-bar" style="height:70%"></div>
+                            </div>
+                        </div>
+                        <input id="file-upload" type="file" accept="video/*" class="hidden" onchange="handleFileSelect(this.files[0])"/>
+                    </div>
+
+                    <!-- Settings panel -->
+                    <div class="glass rounded-2xl p-5 flex flex-col relative overflow-hidden">
+                        <div class="absolute top-0 right-0 w-40 h-40 pointer-events-none" style="background:radial-gradient(circle,rgba(37,99,235,0.08),transparent 70%);"></div>
+                        <h3 class="text-base font-bold text-white mb-4 flex items-center gap-2">
+                            <i data-lucide="cpu" class="w-4 h-4 text-blue-400"></i> Configurar Shorts
+                        </h3>
+
+                        <div class="space-y-4 flex-1 relative z-10 overflow-y-auto" style="max-height:420px;">
+
+                            <!-- ── Duração do clip ── -->
+                            <div>
+                                <label class="text-xs font-bold uppercase tracking-widest text-slate-500 mb-2 block flex items-center gap-1.5">
+                                    <i data-lucide="clock" class="w-3 h-3"></i> Duração do Short
+                                </label>
+                                <div class="grid grid-cols-3 gap-1.5" id="duration-btns">
+                                    <button onclick="setDuration(15)"  class="dur-btn py-2 rounded-lg text-xs font-bold text-slate-400 transition" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);">15s</button>
+                                    <button onclick="setDuration(20)"  class="dur-btn py-2 rounded-lg text-xs font-bold text-slate-400 transition" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);">20s</button>
+                                    <button onclick="setDuration(30)"  class="dur-btn py-2 rounded-lg text-xs font-bold text-slate-400 transition" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);">30s</button>
+                                    <button onclick="setDuration(45)"  class="dur-btn py-2 rounded-lg text-xs font-bold text-white  transition active-dur" style="background:rgba(124,58,237,0.25);border:1px solid rgba(168,85,247,0.4);box-shadow:0 0 8px rgba(124,58,237,0.3);">45s ★</button>
+                                    <button onclick="setDuration(60)"  class="dur-btn py-2 rounded-lg text-xs font-bold text-slate-400 transition" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);">1 min</button>
+                                    <button onclick="setDuration(90)"  class="dur-btn py-2 rounded-lg text-xs font-bold text-slate-400 transition" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);">90s</button>
+                                </div>
+                                <p id="dur-hint" class="text-[10px] text-slate-600 mt-1.5 text-center">Duração ideal: <span id="dur-label" class="text-purple-400 font-bold">45s</span> — melhor retenção no TikTok</p>
+                            </div>
+
+                            <!-- ── Número de clips ── -->
+                            <div>
+                                <label class="text-xs font-bold uppercase tracking-widest text-slate-500 mb-2 block flex items-center gap-1.5">
+                                    <i data-lucide="layers" class="w-3 h-3"></i> Quantidade de Shorts
+                                </label>
+                                <div class="grid grid-cols-4 gap-1.5" id="qty-btns">
+                                    <button onclick="setQty(3)"  class="qty-btn py-2 rounded-lg text-xs font-bold text-slate-400 transition" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);">3</button>
+                                    <button onclick="setQty(5)"  class="qty-btn py-2 rounded-lg text-xs font-bold text-white  transition active-qty" style="background:rgba(37,99,235,0.25);border:1px solid rgba(96,165,250,0.4);">5 ★</button>
+                                    <button onclick="setQty(8)"  class="qty-btn py-2 rounded-lg text-xs font-bold text-slate-400 transition" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);">8</button>
+                                    <button onclick="setQty(10)" class="qty-btn py-2 rounded-lg text-xs font-bold text-slate-400 transition" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);">10</button>
+                                </div>
+                            </div>
+
+                            <!-- ── Nicho / Plataforma viral ── -->
+                            <div>
+                                <label class="text-xs font-bold uppercase tracking-widest text-slate-500 mb-2 block flex items-center gap-1.5">
+                                    <i data-lucide="trending-up" class="w-3 h-3 text-pink-400"></i> Plataforma Alvo
+                                </label>
+                                <div class="grid grid-cols-2 gap-1.5">
+                                    <button onclick="setPlatform(this,'tiktok')"   class="plat-btn py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition active-plat" style="background:rgba(20,20,20,0.8);border:1px solid rgba(255,255,255,0.15);color:#fff;">
+                                        <span>♪</span> TikTok
+                                    </button>
+                                    <button onclick="setPlatform(this,'reels')"   class="plat-btn py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);color:#94a3b8;">
+                                        <i data-lucide="instagram" class="w-3 h-3"></i> Reels
+                                    </button>
+                                    <button onclick="setPlatform(this,'youtube')" class="plat-btn py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);color:#94a3b8;">
+                                        <i data-lucide="youtube" class="w-3 h-3"></i> Shorts
+                                    </button>
+                                    <button onclick="setPlatform(this,'all')"    class="plat-btn py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);color:#94a3b8;">
+                                        <i data-lucide="globe" class="w-3 h-3"></i> Todos
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- ── Transcrição ── -->
+                            <div>
+                                <label class="text-xs font-bold uppercase tracking-widest text-slate-500 mb-2 block">Transcrição IA</label>
+                                <div class="relative">
+                                    <select id="transcription-select" class="w-full px-4 py-2.5 rounded-xl text-sm text-slate-200 font-medium appearance-none outline-none transition" style="background:#161622; border:1px solid rgba(255,255,255,0.08);">
+                                        <option value="groq-whisper">Whisper Large v3 — Groq (Gratis)</option>
+                                        <option value="hf-whisper">Whisper — Hugging Face (Gratis)</option>
+                                    </select>
+                                    <i data-lucide="chevrons-up-down" class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none"></i>
+                                </div>
+                            </div>
+
+                            <!-- ── Toggles ── -->
+                            <div class="space-y-0.5 pt-1" style="border-top:1px solid rgba(255,255,255,0.05);">
+                                <div class="flex items-center justify-between py-2.5 cursor-pointer rounded-xl px-1 hover:bg-white/[0.02] transition" onclick="toggleSwitch(this)">
+                                    <span class="text-xs font-semibold text-slate-300">Face Tracking 9:16</span>
+                                    <div class="w-10 h-5 rounded-full relative flex items-center px-0.5 toggle-bg" style="background:#7c3aed;">
+                                        <div class="w-4 h-4 rounded-full bg-white toggle-dot" style="transform:translateX(20px); box-shadow:0 1px 3px rgba(0,0,0,0.4);"></div>
+                                    </div>
+                                </div>
+                                <div class="flex items-center justify-between py-2.5 cursor-pointer rounded-xl px-1 hover:bg-white/[0.02] transition" onclick="toggleSwitch(this)">
+                                    <span class="text-xs font-semibold text-slate-300">Legendas Dinamicas</span>
+                                    <div class="w-10 h-5 rounded-full relative flex items-center px-0.5 toggle-bg" style="background:#7c3aed;">
+                                        <div class="w-4 h-4 rounded-full bg-white toggle-dot" style="transform:translateX(20px); box-shadow:0 1px 3px rgba(0,0,0,0.4);"></div>
+                                    </div>
+                                </div>
+                                <div class="flex items-center justify-between py-2.5 cursor-pointer rounded-xl px-1 hover:bg-white/[0.02] transition" onclick="toggleSwitch(this)">
+                                    <span class="text-xs font-semibold text-slate-300">Remover Silencios</span>
+                                    <div class="w-10 h-5 rounded-full relative flex items-center px-0.5 toggle-bg" style="background:#7c3aed;">
+                                        <div class="w-4 h-4 rounded-full bg-white toggle-dot" style="transform:translateX(20px); box-shadow:0 1px 3px rgba(0,0,0,0.4);"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button id="btn-generate" onclick="startProcessing()" disabled class="mt-4 w-full py-3.5 rounded-xl font-bold text-sm transition-all duration-300 flex items-center justify-center gap-2 relative overflow-hidden" style="background:rgba(255,255,255,0.05); color:#475569; cursor:not-allowed; border:1px solid rgba(255,255,255,0.05);">
+                            <i data-lucide="wand-2" class="w-4 h-4"></i>
+                            <span>Gerar Shorts com IA</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Features bar -->
+                <div class="flex flex-wrap justify-center gap-4 mt-6 anim-fade-up" style="animation-delay:0.2s;">
+                    <div class="flex items-center gap-2 text-xs text-slate-500">
+                        <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-500"></i> Processamento local
+                    </div>
+                    <div class="flex items-center gap-2 text-xs text-slate-500">
+                        <i data-lucide="zap" class="w-3.5 h-3.5 text-yellow-500"></i> Groq API gratuita
+                    </div>
+                    <div class="flex items-center gap-2 text-xs text-slate-500">
+                        <i data-lucide="film" class="w-3.5 h-3.5 text-blue-500"></i> Até 50 shorts por vídeo
+                    </div>
+                    <div class="flex items-center gap-2 text-xs text-slate-500">
+                        <i data-lucide="clock" class="w-3.5 h-3.5 text-purple-500"></i> Resultado em minutos
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── PROCESSING STEP ── -->
+        <div id="step-processing" class="view-section absolute inset-0 flex-col items-center justify-center p-8 anim-fade" style="background:#030306; z-index:50;">
+            <div class="grid-bg absolute inset-0 pointer-events-none opacity-30"></div>
+            <div class="relative z-10 flex flex-col items-center max-w-lg w-full">
+                <!-- Spinner rings -->
+                <div class="relative w-56 h-56 flex items-center justify-center mb-8">
+                    <div class="absolute inset-0 rounded-full spin-slow" style="border:1.5px solid rgba(168,85,247,0.15);"></div>
+                    <div class="absolute inset-5 rounded-full spin-reverse" style="border:1.5px solid rgba(96,165,250,0.2);"></div>
+                    <div class="absolute inset-10 rounded-full spin-fast" style="border-top:3px solid #a855f7; border-right:3px solid transparent; border-bottom:3px solid transparent; border-left:3px solid transparent; filter:drop-shadow(0 0 10px rgba(168,85,247,0.8));"></div>
+                    <div class="text-center z-10">
+                        <span id="progress-value" class="text-5xl font-black progress-glow" style="background:linear-gradient(135deg,#60a5fa,#a855f7,#ec4899); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">0%</span>
+                    </div>
+                </div>
+
+                <h2 id="progress-text" class="text-2xl font-black text-white mb-2 text-center">Iniciando IA...</h2>
+                <p class="text-slate-400 text-sm text-center mb-8">Nosso sistema analisa frames, áudio e expressões para encontrar os melhores momentos.</p>
+
+                <!-- Steps list -->
+                <div id="processing-steps" class="w-full space-y-2">
+                    <div class="step-pill pending" data-step="0"><i data-lucide="music" class="w-4 h-4"></i> Extraindo áudio do vídeo</div>
+                    <div class="step-pill pending" data-step="1"><i data-lucide="mic" class="w-4 h-4"></i> Transcrevendo com Whisper IA</div>
+                    <div class="step-pill pending" data-step="2"><i data-lucide="brain" class="w-4 h-4"></i> Analisando conteúdo com LLM</div>
+                    <div class="step-pill pending" data-step="3"><i data-lucide="target" class="w-4 h-4"></i> Identificando momentos virais</div>
+                    <div class="step-pill pending" data-step="4"><i data-lucide="crop" class="w-4 h-4"></i> Enquadrando 9:16 (Auto-Crop)</div>
+                    <div class="step-pill pending" data-step="5"><i data-lucide="type" class="w-4 h-4"></i> Gerando legendas dinâmicas</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── RESULTS STEP ── -->
+        <div id="step-results" class="view-section absolute inset-0 anim-fade">
+            <!-- Left panel -->
+            <div class="w-[360px] shrink-0 flex flex-col h-full" style="background:#0a0a10; border-right:1px solid var(--border);">
+                <div class="p-5" style="border-bottom:1px solid var(--border);">
+                    <div class="flex items-center justify-between mb-1">
+                        <h2 class="text-lg font-black text-white flex items-center gap-2">
+                            <i data-lucide="sparkles" class="w-5 h-5 text-purple-400"></i> Clipes Gerados
+                        </h2>
+                        <span class="text-xs font-bold px-2.5 py-1 rounded-lg" style="background:rgba(168,85,247,0.12); color:#a855f7; border:1px solid rgba(168,85,247,0.2);">5 clipes</span>
+                    </div>
+                    <p class="text-xs text-slate-500">Ordenados por potencial viral</p>
+                </div>
+                <div id="shorts-list" class="flex-1 overflow-y-auto p-3 space-y-2"></div>
+                <!-- Export all -->
+                <div class="p-4" style="border-top:1px solid var(--border);">
+                    <button onclick="exportAllShorts()" class="w-full py-3 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 transition hover:opacity-90 glow-purple-sm" style="background:linear-gradient(135deg,#2563eb,#7c3aed);">
+                        <i data-lucide="download-cloud" class="w-4 h-4"></i> Exportar Todos (HD)
+                    </button>
+                </div>
+            </div>
+
+            <!-- Right panel -->
+            <div class="flex-1 flex flex-col overflow-hidden" style="background:var(--bg-base);">
+                <div class="flex-1 flex items-center justify-center p-8 gap-10 relative overflow-hidden">
+                    <div class="absolute inset-0 pointer-events-none" style="background:radial-gradient(ellipse at center,rgba(124,58,237,0.06),transparent 70%);"></div>
+
+                    <!-- Phone mockup -->
+                    <div class="relative shrink-0">
+                        <div class="absolute -inset-4 rounded-[3rem] pointer-events-none" style="background:linear-gradient(135deg,rgba(37,99,235,0.15),rgba(124,58,237,0.15),rgba(236,72,153,0.1)); filter:blur(30px);"></div>
+                        <div class="relative phone-glow rounded-[2.5rem] overflow-hidden flex flex-col" style="width:220px; height:390px; background:#000; border:5px solid #1a1a28;">
+                            <!-- Notch -->
+                            <div class="absolute top-2 left-1/2 -translate-x-1/2 w-20 h-4 rounded-full z-30" style="background:#000;"></div>
+                            <!-- Video: muted for autoplay, user unmutes with button -->
+                            <video id="result-video" class="absolute inset-0 w-full h-full object-cover" loop autoplay muted playsinline style="opacity:0.9;" crossorigin="anonymous"></video>
+                            <!-- Gradient overlay -->
+                            <div class="absolute inset-0 pointer-events-none z-10" style="background:linear-gradient(to top,rgba(0,0,0,0.9) 0%,transparent 40%,rgba(0,0,0,0.2) 100%);"></div>
+                            <!-- Subtitle overlay (JS-driven) -->
+                            <div id="result-sub-overlay" class="absolute z-20 w-full px-3 text-center" style="bottom:60px;min-height:44px;display:flex;align-items:flex-end;justify-content:center;"></div>
+                            <!-- Volume button -->
+                            <button id="result-vol-btn" onclick="resultToggleMute()" class="absolute top-8 right-3 z-30 w-7 h-7 rounded-full flex items-center justify-center" style="background:rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.2);">
+                                <i data-lucide="volume-2" class="w-3.5 h-3.5 text-white"></i>
+                            </button>
+                            <!-- TikTok UI elements -->
+                            <div class="absolute right-3 z-20 flex flex-col gap-4" style="bottom:80px;">
+                                <button class="flex flex-col items-center gap-1"><i data-lucide="heart" class="w-6 h-6 text-white fill-white"></i><span class="text-white text-[9px] font-bold">124k</span></button>
+                                <button class="flex flex-col items-center gap-1"><i data-lucide="message-circle" class="w-6 h-6 text-white"></i><span class="text-white text-[9px] font-bold">2.1k</span></button>
+                                <button class="flex flex-col items-center gap-1"><i data-lucide="share-2" class="w-6 h-6 text-white"></i><span class="text-white text-[9px] font-bold">Share</span></button>
+                            </div>
+                            <!-- Play overlay (click to play/pause) -->
+                            <div id="result-play-overlay" onclick="resultPlayPause()" class="absolute inset-0 flex items-center justify-center z-30 opacity-0 hover:opacity-100 transition-opacity cursor-pointer" style="background:rgba(0,0,0,0.2);">
+                                <div id="result-play-icon" class="w-16 h-16 rounded-full flex items-center justify-center" style="background:rgba(255,255,255,0.2); backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,0.3);">
+                                    <i data-lucide="pause" class="w-7 h-7 text-white fill-white"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Details panel -->
+                    <div class="flex flex-col gap-4 w-72">
+                        <!-- Score card -->
+                        <div class="glass rounded-2xl p-5 grad-border card-lift">
+                            <h3 id="selected-title" class="font-bold text-white text-base leading-snug mb-4">O Segredo do Sucesso</h3>
+                            <div class="flex items-center gap-4 mb-4">
+                                <!-- Score ring -->
+                                <div class="relative w-16 h-16 shrink-0">
+                                    <svg class="w-full h-full" viewBox="0 0 90 90">
+                                        <circle cx="45" cy="45" r="40" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="8"/>
+                                        <circle id="score-ring" class="score-ring" cx="45" cy="45" r="40" fill="none" stroke="url(#scoreGrad)" stroke-width="8"/>
+                                        <defs><linearGradient id="scoreGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#60a5fa"/><stop offset="100%" stop-color="#a855f7"/></linearGradient></defs>
+                                    </svg>
+                                    <div class="absolute inset-0 flex items-center justify-center">
+                                        <span id="selected-score" class="text-sm font-black text-white">99%</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="text-xs text-slate-500 font-medium mb-1">Retenção Estimada</div>
+                                    <div class="flex gap-1 flex-wrap">
+                                        <span class="viral-badge">🔥 VIRAL</span>
+                                        <span class="text-[10px] font-semibold px-2 py-0.5 rounded" style="background:rgba(16,185,129,0.1); color:#10b981; border:1px solid rgba(16,185,129,0.2);">Top 1%</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <button onclick="setStep('editor')" class="w-full py-2.5 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 transition hover:opacity-90" style="background:rgba(124,58,237,0.25); border:1px solid rgba(168,85,247,0.3);">
+                                <i data-lucide="edit-3" class="w-4 h-4 text-purple-400"></i> Abrir Editor
+                            </button>
+                        </div>
+
+                        <!-- Publish card -->
+                        <div class="glass rounded-2xl p-5 card-lift">
+                            <h4 class="text-xs font-bold uppercase tracking-widest text-slate-500 mb-4 flex items-center gap-2">
+                                <i data-lucide="send" class="w-3.5 h-3.5 text-pink-500"></i> Publicar Agora
+                            </h4>
+                            <div class="space-y-2">
+                                <button class="w-full px-4 py-2.5 rounded-xl flex items-center justify-between text-slate-300 transition group text-sm" style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05);" onmouseover="this.style.background='linear-gradient(135deg,rgba(124,58,237,0.25),rgba(236,72,153,0.15))'; this.style.borderColor='rgba(168,85,247,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.02)'; this.style.borderColor='rgba(255,255,255,0.05)'">
+                                    <div class="flex items-center gap-3"><i data-lucide="instagram" class="w-4 h-4"></i><span class="font-semibold">Instagram Reels</span></div>
+                                    <i data-lucide="arrow-right" class="w-3.5 h-3.5 opacity-40"></i>
+                                </button>
+                                <button class="w-full px-4 py-2.5 rounded-xl flex items-center justify-between text-slate-300 transition group text-sm" style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05);" onmouseover="this.style.background='linear-gradient(135deg,rgba(6,182,212,0.2),rgba(37,99,235,0.15))'; this.style.borderColor='rgba(96,165,250,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.02)'; this.style.borderColor='rgba(255,255,255,0.05)'">
+                                    <div class="flex items-center gap-3"><i data-lucide="music-2" class="w-4 h-4"></i><span class="font-semibold">TikTok</span></div>
+                                    <i data-lucide="arrow-right" class="w-3.5 h-3.5 opacity-40"></i>
+                                </button>
+                                <button class="w-full px-4 py-2.5 rounded-xl flex items-center justify-between text-slate-300 transition group text-sm" style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05);" onmouseover="this.style.background='linear-gradient(135deg,rgba(220,38,38,0.2),rgba(239,68,68,0.1))'; this.style.borderColor='rgba(239,68,68,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.02)'; this.style.borderColor='rgba(255,255,255,0.05)'">
+                                    <div class="flex items-center gap-3"><i data-lucide="youtube" class="w-4 h-4"></i><span class="font-semibold">YouTube Shorts</span></div>
+                                    <i data-lucide="arrow-right" class="w-3.5 h-3.5 opacity-40"></i>
+                                </button>
+                            </div>
+                            <div class="mt-4 pt-4" style="border-top:1px solid rgba(255,255,255,0.05);">
+                                <button id="btn-export-hd" onclick="exportCurrentShort()" class="w-full py-3 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 transition hover:opacity-90 glow-purple-sm" style="background:linear-gradient(135deg,#2563eb,#7c3aed);">
+                                    <i data-lucide="download" class="w-4 h-4"></i> Exportar HD (1080p)
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── EDITOR STEP ── -->
+        <div id="step-editor" class="view-section absolute inset-0 flex-col anim-fade" style="background:var(--bg-base); z-index:50;">
+            <!-- Editor topbar -->
+            <div class="h-12 shrink-0 flex items-center justify-between px-5 gap-4" style="background:#0a0a10; border-bottom:1px solid var(--border);">
+                <div class="flex items-center gap-4">
+                    <button onclick="setStep('results')" class="flex items-center gap-1.5 text-sm font-medium text-slate-400 hover:text-white transition">
+                        <i data-lucide="arrow-left" class="w-4 h-4"></i> Voltar
+                    </button>
+                    <div style="width:1px;height:16px;background:rgba(255,255,255,0.08);"></div>
+                    <span id="editor-title" class="text-white font-bold text-sm truncate max-w-[200px]">Editor</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span id="editor-time-display" class="hidden md:flex items-center gap-1 text-xs font-mono text-slate-400 px-3 py-1.5 rounded-lg" style="background:rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.06);">00:00 / 00:00</span>
+                    <button onclick="editorExport()" class="px-4 py-1.5 rounded-lg text-sm font-bold text-white transition hover:opacity-90" style="background:linear-gradient(135deg,#7c3aed,#2563eb);box-shadow:0 0 15px rgba(124,58,237,0.3);">
+                        <i data-lucide="download" class="w-3.5 h-3.5 inline mr-1"></i>Exportar
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex-1 flex overflow-hidden">
+                <!-- Canvas -->
+                <div class="flex-1 flex items-center justify-center relative p-6" style="background:#050508;">
+                    <div class="grid-bg absolute inset-0 pointer-events-none opacity-30"></div>
+                    <div class="relative z-10 flex flex-col items-center gap-4">
+                        <!-- Phone -->
+                        <div class="relative rounded-2xl overflow-hidden phone-glow" style="width:210px;height:373px;background:#000;border:4px solid #1a1a28;">
+                            <video id="editor-video" class="absolute inset-0 w-full h-full object-cover" playsinline crossorigin="anonymous" style="opacity:0.92;"></video>
+                            <div class="absolute inset-0 pointer-events-none" style="background:linear-gradient(to top,rgba(0,0,0,0.88) 0%,transparent 45%,rgba(0,0,0,0.1) 100%);"></div>
+                            <!-- Subtitle overlay — covers bottom 68px to hide any burned subs -->
+                            <div id="editor-sub-overlay" class="absolute z-20 w-full flex items-end justify-center px-3 text-center" style="bottom:0; height:68px; background:linear-gradient(transparent 0%, rgba(0,0,0,0.97) 38%); padding-bottom:8px;"></div>
+                            <!-- Face tracking box -->
+                            <div class="absolute z-10 pointer-events-none" style="top:22%;left:14%;width:72%;height:36%;border:2px dashed rgba(34,197,94,0.45);border-radius:10px;background:rgba(34,197,94,0.04);">
+                                <span class="absolute top-1 right-1 text-black font-black px-1.5 py-0.5 rounded bg-green-400" style="font-size:7px;">FACE AI</span>
+                            </div>
+                            <!-- Play/Pause overlay -->
+                            <div id="editor-play-overlay" class="absolute inset-0 z-30 flex items-center justify-center" style="background:rgba(0,0,0,0.1);" onclick="editorPlayPause()">
+                                <button id="editor-play-btn" class="w-14 h-14 rounded-full flex items-center justify-center transition-all hover:scale-110" style="background:rgba(255,255,255,0.18);backdrop-filter:blur(8px);border:1.5px solid rgba(255,255,255,0.3);">
+                                    <i data-lucide="play" class="w-6 h-6 text-white fill-white ml-1"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <!-- Play controls under phone -->
+                        <div class="flex items-center gap-3">
+                            <button onclick="editorSeekRel(-5)" class="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-white transition" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);">
+                                <i data-lucide="skip-back" class="w-4 h-4"></i>
+                            </button>
+                            <button onclick="editorPlayPause()" id="editor-play-btn2" class="w-10 h-10 rounded-full flex items-center justify-center text-white transition hover:scale-110 glow-purple-sm" style="background:linear-gradient(135deg,#7c3aed,#2563eb);">
+                                <i data-lucide="play" class="w-5 h-5 fill-white ml-0.5"></i>
+                            </button>
+                            <button onclick="editorSeekRel(5)" class="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-white transition" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);">
+                                <i data-lucide="skip-forward" class="w-4 h-4"></i>
+                            </button>
+                            <button id="editor-vol-btn" onclick="editorToggleMute()" class="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-white transition" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);">
+                                <i data-lucide="volume-2" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right - captions panel -->
+                <div class="w-[340px] shrink-0 flex flex-col" style="background:#0a0a10;border-left:1px solid var(--border);">
+                    <!-- Style selector -->
+                    <div class="p-4" style="border-bottom:1px solid var(--border);">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="flex items-center gap-2 text-sm font-bold text-white">
+                                <i data-lucide="type" class="w-4 h-4 text-purple-400"></i> Estilo de Legenda
+                            </div>
+                            <span id="sub-style-label" class="text-xs font-bold px-2 py-0.5 rounded-md" style="background:rgba(168,85,247,0.12);color:#a855f7;border:1px solid rgba(168,85,247,0.2);">Classic</span>
+                        </div>
+                        <div class="grid grid-cols-4 gap-1.5" id="sub-style-btns">
+                            <!-- Cada botão gerenciado 100% via JS em setSubStyle() -->
+                            <div onclick="setSubStyle(0)"  data-si="0"  class="sub-style-btn rounded-lg p-1.5 flex flex-col items-center justify-center cursor-pointer transition gap-0.5" style="background:#1e1b2e;border:2px solid #7c3aed;box-shadow:0 0 10px rgba(124,58,237,0.4);min-height:52px;"><span style="font-weight:900;font-size:0.95rem;color:#fff;-webkit-text-stroke:1px #000;text-shadow:1px 1px 0 #000;">Aa</span><span style="font-size:7px;color:#94a3b8;font-weight:700;">CLASSIC</span></div>
+                            <div onclick="setSubStyle(1)"  data-si="1"  class="sub-style-btn rounded-lg p-1.5 flex flex-col items-center justify-center cursor-pointer transition gap-0.5" style="background:#1a1a10;border:1px solid rgba(255,255,255,0.07);min-height:52px;"><span style="font-weight:900;font-size:0.95rem;color:#fbbf24;-webkit-text-stroke:1px #000;text-shadow:1px 1px 0 #000;">Aa</span><span style="font-size:7px;color:#78716c;font-weight:700;">HORMOZI</span></div>
+                            <div onclick="setSubStyle(2)"  data-si="2"  class="sub-style-btn rounded-lg p-1.5 flex flex-col items-center justify-center cursor-pointer transition gap-0.5" style="background:#0a0a0a;border:1px solid rgba(168,85,247,0.2);min-height:52px;"><span style="font-weight:900;font-size:0.95rem;color:#fff;background:rgba(0,0,0,0.8);padding:1px 5px;border-left:2px solid #a855f7;">Aa</span><span style="font-size:7px;color:#64748b;font-weight:700;">BOX</span></div>
+                            <div onclick="setSubStyle(3)"  data-si="3"  class="sub-style-btn rounded-lg p-1.5 flex flex-col items-center justify-center cursor-pointer transition gap-0.5" style="background:#120820;border:1px solid rgba(232,121,249,0.15);min-height:52px;"><span style="font-weight:900;font-size:0.95rem;color:#e879f9;text-shadow:0 0 8px #a855f7;">Aa</span><span style="font-size:7px;color:#6b21a8;font-weight:700;">NEON</span></div>
+                            <div onclick="setSubStyle(4)"  data-si="4"  class="sub-style-btn rounded-lg p-1.5 flex flex-col items-center justify-center cursor-pointer transition gap-0.5" style="background:#1a0800;border:1px solid rgba(249,115,22,0.15);min-height:52px;"><span style="font-weight:900;font-size:0.95rem;background:linear-gradient(135deg,#fbbf24,#f97316,#ef4444);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;">Aa</span><span style="font-size:7px;color:#7c2d12;font-weight:700;">FIRE</span></div>
+                            <div onclick="setSubStyle(5)"  data-si="5"  class="sub-style-btn rounded-lg p-1.5 flex flex-col items-center justify-center cursor-pointer transition gap-0.5" style="background:#050508;border:1px solid rgba(255,255,255,0.08);min-height:52px;"><span style="font-weight:900;font-size:0.95rem;color:#fff;text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;letter-spacing:0.05em;">Aa</span><span style="font-size:7px;color:#475569;font-weight:700;">CINEMA</span></div>
+                            <div onclick="setSubStyle(6)"  data-si="6"  class="sub-style-btn rounded-lg p-1.5 flex flex-col items-center justify-center cursor-pointer transition gap-0.5" style="background:#03080f;border:1px solid rgba(96,165,250,0.15);min-height:52px;"><span style="font-weight:900;font-size:0.95rem;color:#fff;text-shadow:1px 1px 0 #1e40af,2px 2px 0 #1e3a8a,3px 3px 0 rgba(0,0,0,0.4);">Aa</span><span style="font-size:7px;color:#1e3a8a;font-weight:700;">3D POP</span></div>
+                            <div onclick="setSubStyle(7)"  data-si="7"  class="sub-style-btn rounded-lg p-1.5 flex flex-col items-center justify-center cursor-pointer transition gap-0.5" style="background:#1a0010;border:1px solid rgba(244,114,182,0.15);min-height:52px;"><span style="font-weight:900;font-size:0.95rem;color:#f472b6;text-shadow:0 0 8px rgba(244,114,182,0.5),1px 1px 0 #000;">Aa</span><span style="font-size:7px;color:#9d174d;font-weight:700;">PINK</span></div>
+                            <div onclick="setSubStyle(8)"  data-si="8"  class="sub-style-btn rounded-lg p-1.5 flex flex-col items-center justify-center cursor-pointer transition gap-0.5" style="background:#000a00;border:1px solid rgba(0,255,65,0.15);min-height:52px;"><span style="font-weight:700;font-size:0.85rem;color:#00ff41;text-shadow:0 0 6px #00ff41;font-family:monospace;letter-spacing:0.08em;">Aa</span><span style="font-size:7px;color:#14532d;font-weight:700;">MATRIX</span></div>
+                            <div onclick="setSubStyle(9)"  data-si="9"  class="sub-style-btn rounded-lg p-1.5 flex flex-col items-center justify-center cursor-pointer transition gap-0.5" style="background:#0a0800;border:1px solid rgba(251,191,36,0.15);min-height:52px;"><span style="font-weight:900;font-size:0.95rem;background:linear-gradient(135deg,#fef08a,#fbbf24,#d97706);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.9));">Aa</span><span style="font-size:7px;color:#78350f;font-weight:700;">GOLD</span></div>
+                            <div onclick="setSubStyle(10)" data-si="10" class="sub-style-btn rounded-lg p-1.5 flex flex-col items-center justify-center cursor-pointer transition gap-0.5" style="background:#0a0008;border:1px solid rgba(255,0,128,0.15);min-height:52px;"><span style="font-weight:900;font-size:0.95rem;color:#fff;text-shadow:2px 0 #ff0080,-2px 0 #00ffff,0 2px #000;-webkit-text-stroke:0.5px #000;">Aa</span><span style="font-size:7px;color:#7c0038;font-weight:700;">GLITCH</span></div>
+                            <div onclick="setSubStyle(11)" data-si="11" class="sub-style-btn rounded-lg p-1.5 flex flex-col items-center justify-center cursor-pointer transition gap-0.5" style="background:#08000a;border:1px solid rgba(255,255,255,0.06);min-height:52px;"><span style="font-weight:900;font-size:0.95rem;color:#fff;-webkit-text-stroke:2px #000;text-shadow:0 4px 0 rgba(0,0,0,0.5);display:inline-block;">Aa</span><span style="font-size:7px;color:#44403c;font-weight:700;">BOUNCE</span></div>
+                        </div>
+                    </div>
+                    <!-- Font size -->
+                    <div class="flex items-center justify-between px-4 py-2.5" style="border-bottom:1px solid rgba(255,255,255,0.04);">
+                        <div class="flex items-center gap-1.5 text-xs font-bold text-slate-500">
+                            <i data-lucide="type" class="w-3.5 h-3.5"></i> Tamanho
+                        </div>
+                        <div class="flex gap-1">
+                            <button onclick="setFontSize(16)" data-fz="16" class="fsz-btn px-3 py-1 rounded-lg text-xs font-bold transition" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);color:#94a3b8;">P</button>
+                            <button onclick="setFontSize(22)" data-fz="22" class="fsz-btn px-3 py-1 rounded-lg text-xs font-bold transition" style="background:rgba(124,58,237,0.25);border:1px solid rgba(124,58,237,0.5);color:#a855f7;">M</button>
+                            <button onclick="setFontSize(30)" data-fz="30" class="fsz-btn px-3 py-1 rounded-lg text-xs font-bold transition" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);color:#94a3b8;">G</button>
+                        </div>
+                    </div>
+                    <!-- Tools row -->
+                    <div class="flex items-center gap-2 px-4 py-3" style="border-bottom:1px solid rgba(255,255,255,0.04);">
+                        <button onclick="editorCut()" title="Cortar no ponto atual" class="flex-1 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white flex items-center justify-center gap-1.5 transition" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);">
+                            <i data-lucide="scissors" class="w-3.5 h-3.5"></i> Cortar
+                        </button>
+                        <button onclick="editorUndo()" title="Desfazer" class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white transition" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);">
+                            <i data-lucide="undo-2" class="w-3.5 h-3.5"></i>
+                        </button>
+                        <button onclick="editorRedo()" title="Refazer" class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white transition" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);">
+                            <i data-lucide="redo-2" class="w-3.5 h-3.5"></i>
+                        </button>
+                        <button onclick="editorAddSub()" title="Adicionar legenda" class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white transition" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);">
+                            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                        </button>
+                    </div>
+                    <!-- Subtitle blocks list -->
+                    <div id="editor-sub-list" class="flex-1 overflow-y-auto p-3 space-y-2" style="background:#030306;">
+                        <div class="flex items-center justify-between px-1 py-1 text-xs font-bold uppercase tracking-widest text-slate-600">
+                            <span>Blocos de Legenda</span><span id="editor-sub-count">0 itens</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Timeline -->
+            <div class="shrink-0 flex flex-col" style="height:175px;background:#0a0a10;border-top:1px solid rgba(255,255,255,0.07);">
+                <!-- Timeline top bar -->
+                <div class="h-9 flex items-center justify-between px-4" style="border-bottom:1px solid rgba(255,255,255,0.05);">
+                    <div class="flex items-center gap-1.5">
+                        <button onclick="editorCut()" class="timeline-tool-btn" title="Cortar"><i data-lucide="scissors" class="w-3.5 h-3.5"></i></button>
+                        <button onclick="editorUndo()" class="timeline-tool-btn" title="Desfazer"><i data-lucide="undo-2" class="w-3.5 h-3.5"></i></button>
+                        <button onclick="editorRedo()" class="timeline-tool-btn" title="Refazer"><i data-lucide="redo-2" class="w-3.5 h-3.5"></i></button>
+                        <div style="width:1px;height:14px;background:rgba(255,255,255,0.07);margin:0 4px;"></div>
+                        <button onclick="editorSeekRel(-5)" class="timeline-tool-btn" title="-5s"><i data-lucide="skip-back" class="w-3.5 h-3.5"></i></button>
+                        <button onclick="editorPlayPause()" id="editor-tl-play" class="timeline-tool-btn text-purple-400" title="Play/Pause"><i data-lucide="play" class="w-3.5 h-3.5"></i></button>
+                        <button onclick="editorSeekRel(5)" class="timeline-tool-btn" title="+5s"><i data-lucide="skip-forward" class="w-3.5 h-3.5"></i></button>
+                    </div>
+                    <span id="editor-tl-time" class="text-xs font-mono text-slate-500">00:00 / 00:00</span>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs text-slate-700">Zoom</span>
+                        <input id="tl-zoom" type="range" min="1" max="4" step="0.1" value="1" class="w-16 h-0.5 appearance-none cursor-pointer" style="accent-color:#7c3aed;" oninput="editorZoom(this.value)">
+                    </div>
+                </div>
+
+                <!-- Tracks area -->
+                <div class="flex-1 relative overflow-hidden">
+                    <!-- Clickable timeline scrubber (drag + click) -->
+                    <div id="timeline-scrubber" class="absolute top-0 left-20 right-0 h-3 cursor-ew-resize z-20 select-none" style="background:rgba(255,255,255,0.03);border-bottom:1px solid rgba(255,255,255,0.06);" onmousedown="event.preventDefault()">
+                        <div id="timeline-progress-bar" class="h-full" style="background:linear-gradient(90deg,rgba(124,58,237,0.6),rgba(96,165,250,0.4));width:0%;"></div>
+                    </div>
+                    <!-- Playhead — draggable (pointer-events enabled on the diamond handle) -->
+                    <div id="timeline-playhead" class="absolute top-0 bottom-0 z-30" style="left:80px;pointer-events:none;">
+                        <div class="w-px h-full" style="background:rgba(239,68,68,0.9);box-shadow:0 0 5px rgba(239,68,68,0.6);"></div>
+                        <!-- Draggable diamond handle -->
+                        <div id="playhead-handle" class="absolute -top-0 -left-2.5 w-5 h-5 flex items-center justify-center cursor-ew-resize z-40 select-none" style="pointer-events:all;">
+                            <div class="w-3 h-3 rounded-sm rotate-45" style="background:#ef4444;box-shadow:0 0 6px rgba(239,68,68,0.8);"></div>
+                        </div>
+                    </div>
+
+                    <!-- Tracks -->
+                    <div class="pt-2 space-y-1.5 px-0">
+                        <!-- Video track -->
+                        <div class="flex items-center h-11">
+                            <div class="w-20 shrink-0 h-full flex items-center justify-center gap-1 text-xs text-blue-400 font-semibold" style="background:#0d0d14;border-right:1px solid rgba(255,255,255,0.05);border-radius:8px 0 0 8px;">
+                                <i data-lucide="video" class="w-3.5 h-3.5"></i><span class="hidden sm:inline text-[11px]">Vídeo</span>
+                            </div>
+                            <div id="video-track" class="flex-1 h-full relative rounded-r-lg overflow-hidden cursor-ew-resize select-none" style="background:rgba(37,99,235,0.08);border:1px solid rgba(37,99,235,0.2);" onmousedown="event.preventDefault()">
+                                <div id="video-track-fill" class="absolute left-0 top-0 bottom-0" style="background:linear-gradient(90deg,rgba(37,99,235,0.35),rgba(96,165,250,0.25));width:100%;"></div>
+                                <div class="absolute inset-0 flex items-center px-2 gap-1 pointer-events-none">
+                                    <div class="w-9 h-7 rounded shrink-0" style="background:rgba(37,99,235,0.4);"></div>
+                                    <div class="w-9 h-7 rounded shrink-0" style="background:rgba(37,99,235,0.25);"></div>
+                                    <div class="w-9 h-7 rounded shrink-0" style="background:rgba(37,99,235,0.4);"></div>
+                                    <div class="flex-1 h-7 rounded" style="background:rgba(37,99,235,0.18);"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Audio track -->
+                        <div class="flex items-center h-9">
+                            <div class="w-20 shrink-0 h-full flex items-center justify-center gap-1 text-xs text-emerald-400 font-semibold" style="background:#0d0d14;border-right:1px solid rgba(255,255,255,0.05);border-radius:8px 0 0 8px;">
+                                <i data-lucide="music" class="w-3.5 h-3.5"></i><span class="hidden sm:inline text-[11px]">Áudio</span>
+                            </div>
+                            <div class="flex-1 h-full rounded-r-lg overflow-hidden" style="background:rgba(16,185,129,0.05);border:1px solid rgba(16,185,129,0.12);">
+                                <svg class="w-full h-full" preserveAspectRatio="none"><path d="M0,18 Q12,4 24,18 T48,18 T72,7 T96,18 T120,14 T144,18 T168,4 T192,18 T216,16 T240,18 T264,6 T288,18 T312,18" stroke="rgba(16,185,129,0.45)" stroke-width="1.5" fill="none"/></svg>
+                            </div>
+                        </div>
+                        <!-- Subtitle track -->
+                        <div class="flex items-center h-8">
+                            <div class="w-20 shrink-0 h-full flex items-center justify-center gap-1 text-xs text-yellow-400 font-semibold" style="background:#0d0d14;border-right:1px solid rgba(255,255,255,0.05);border-radius:8px 0 0 8px;">
+                                <i data-lucide="type" class="w-3.5 h-3.5"></i><span class="hidden sm:inline text-[11px]">Texto</span>
+                            </div>
+                            <div id="subtitle-track" class="flex-1 h-full rounded-r-lg overflow-hidden" style="position:relative;background:rgba(251,191,36,0.03);border:1px solid rgba(251,191,36,0.1);"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div><!-- end tab-projects -->
+
+    <!-- ══════════════════ TEMPLATES TAB ══════════════════ -->
+    <div id="tab-templates" class="tab-section flex-1 overflow-y-auto p-6 relative">
+        <div class="absolute top-0 right-0 w-96 h-96 pointer-events-none" style="background:radial-gradient(circle,rgba(124,58,237,0.06),transparent 70%);"></div>
+        <div class="max-w-5xl mx-auto relative z-10">
+            <div class="flex flex-col sm:flex-row sm:items-end justify-between mb-8 gap-4">
+                <div>
+                    <h1 class="text-3xl font-black text-white tracking-tight mb-1 flex items-center gap-3">
+                        <i data-lucide="layout-template" class="w-7 h-7 text-purple-400"></i> Templates Virais
+                    </h1>
+                    <p class="text-slate-400 text-sm">Estilos otimizados por IA para máxima retenção.</p>
+                </div>
+                <div class="relative">
+                    <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"></i>
+                    <input type="text" placeholder="Buscar template..." class="pl-9 pr-4 py-2.5 rounded-xl text-sm text-white outline-none transition" style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.08); width:220px;">
+                </div>
+            </div>
+            <div class="flex gap-2 mb-6 flex-wrap">
+                <button class="px-4 py-1.5 rounded-full text-sm font-bold text-white transition" style="background:rgba(124,58,237,0.8); box-shadow:0 0 12px rgba(124,58,237,0.3);">Todos</button>
+                <button class="px-4 py-1.5 rounded-full text-sm font-semibold text-slate-300 transition hover:bg-white/10" style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06);">Negócios</button>
+                <button class="px-4 py-1.5 rounded-full text-sm font-semibold text-slate-300 transition hover:bg-white/10" style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06);">Jogos</button>
+                <button class="px-4 py-1.5 rounded-full text-sm font-semibold text-slate-300 transition hover:bg-white/10" style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06);">Lifestyle</button>
+                <button class="px-4 py-1.5 rounded-full text-sm font-semibold text-slate-300 transition hover:bg-white/10" style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06);">Tech</button>
+            </div>
+            <div id="templates-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+        </div>
+    </div>
+
+    <!-- ══════════════════ API TAB ══════════════════ -->
+    <div id="tab-api" class="tab-section flex-1 overflow-y-auto p-6 relative">
+        <div class="max-w-4xl mx-auto">
+            <div class="mb-8">
+                <h1 class="text-3xl font-black text-white mb-2 flex items-center gap-3">
+                    <i data-lucide="key" class="w-7 h-7 text-yellow-400"></i> APIs Gratuitas
+                </h1>
+                <p class="text-slate-400 text-sm">Configure os serviços de IA gratuitos para usar neste projeto.</p>
+            </div>
+
+            <!-- Groq -->
+            <div class="glass rounded-2xl p-6 mb-4 card-lift grad-border">
+                <div class="flex items-start justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-12 h-12 rounded-xl flex items-center justify-center text-2xl" style="background:rgba(168,85,247,0.1); border:1px solid rgba(168,85,247,0.2);">⚡</div>
+                        <div>
+                            <h3 class="text-lg font-bold text-white">Groq API</h3>
+                            <div class="text-xs text-emerald-400 font-semibold">GRATUITO — console.groq.com</div>
+                        </div>
+                    </div>
+                    <span class="px-3 py-1 rounded-full text-xs font-bold" style="background:rgba(16,185,129,0.12); color:#10b981; border:1px solid rgba(16,185,129,0.2);">✓ Recomendado</span>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4 text-sm">
+                    <div class="p-3 rounded-xl" style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05);">
+                        <div class="text-slate-500 text-xs font-bold uppercase mb-1">Transcrição</div>
+                        <div class="text-slate-200 font-semibold">Whisper Large v3</div>
+                        <div class="text-slate-400 text-xs mt-1">7.200 req/dia grátis</div>
+                    </div>
+                    <div class="p-3 rounded-xl" style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05);">
+                        <div class="text-slate-500 text-xs font-bold uppercase mb-1">LLM</div>
+                        <div class="text-slate-200 font-semibold">Llama 3.3 70B</div>
+                        <div class="text-slate-400 text-xs mt-1">14.400 req/dia grátis</div>
+                    </div>
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5 block">Chave API Groq</label>
+                    <div class="flex gap-2">
+                        <input type="password" id="groq-key" placeholder="gsk_..." class="flex-1 px-4 py-2.5 rounded-xl text-sm text-white font-mono outline-none transition focus:border-purple-500" style="background:#161622; border:1px solid rgba(255,255,255,0.08);">
+                        <button onclick="saveApiKey('groq')" class="px-4 py-2.5 rounded-xl text-sm font-bold text-white transition hover:opacity-80" style="background:rgba(124,58,237,0.5); border:1px solid rgba(168,85,247,0.3);">Salvar</button>
+                    </div>
+                    <p class="text-xs text-slate-600 mt-1.5">Obtenha em: <a href="https://console.groq.com" target="_blank" class="text-purple-400 hover:text-purple-300">console.groq.com</a> → API Keys → Create</p>
+                </div>
+            </div>
+
+            <!-- OpenRouter -->
+            <div class="glass rounded-2xl p-6 mb-4 card-lift">
+                <div class="flex items-start justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-12 h-12 rounded-xl flex items-center justify-center text-2xl" style="background:rgba(96,165,250,0.1); border:1px solid rgba(96,165,250,0.2);">🔀</div>
+                        <div>
+                            <h3 class="text-lg font-bold text-white">OpenRouter</h3>
+                            <div class="text-xs text-blue-400 font-semibold">GRATUITO (modelos free) — openrouter.ai</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4 text-xs">
+                    <div class="p-2.5 rounded-lg text-center" style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05);">
+                        <div class="text-slate-200 font-bold">Llama 3.1 8B</div><div class="text-slate-500">Grátis</div>
+                    </div>
+                    <div class="p-2.5 rounded-lg text-center" style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05);">
+                        <div class="text-slate-200 font-bold">Mistral 7B</div><div class="text-slate-500">Grátis</div>
+                    </div>
+                    <div class="p-2.5 rounded-lg text-center" style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05);">
+                        <div class="text-slate-200 font-bold">Gemma 2 9B</div><div class="text-slate-500">Grátis</div>
+                    </div>
+                    <div class="p-2.5 rounded-lg text-center" style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05);">
+                        <div class="text-slate-200 font-bold">Phi-3 Mini</div><div class="text-slate-500">Grátis</div>
+                    </div>
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5 block">Chave API OpenRouter</label>
+                    <div class="flex gap-2">
+                        <input type="password" id="openrouter-key" placeholder="sk-or-..." class="flex-1 px-4 py-2.5 rounded-xl text-sm text-white font-mono outline-none transition" style="background:#161622; border:1px solid rgba(255,255,255,0.08);">
+                        <button onclick="saveApiKey('openrouter')" class="px-4 py-2.5 rounded-xl text-sm font-bold text-white transition hover:opacity-80" style="background:rgba(37,99,235,0.4); border:1px solid rgba(96,165,250,0.2);">Salvar</button>
+                    </div>
+                    <p class="text-xs text-slate-600 mt-1.5">Obtenha em: <a href="https://openrouter.ai/keys" target="_blank" class="text-blue-400 hover:text-blue-300">openrouter.ai/keys</a></p>
+                </div>
+            </div>
+
+            <!-- Hugging Face -->
+            <div class="glass rounded-2xl p-6 card-lift">
+                <div class="flex items-start justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-12 h-12 rounded-xl flex items-center justify-center text-2xl" style="background:rgba(251,191,36,0.1); border:1px solid rgba(251,191,36,0.2);">🤗</div>
+                        <div>
+                            <h3 class="text-lg font-bold text-white">Hugging Face</h3>
+                            <div class="text-xs text-yellow-400 font-semibold">GRATUITO (Inference API) — huggingface.co</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4 text-sm">
+                    <div class="p-3 rounded-xl" style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05);">
+                        <div class="text-slate-500 text-xs font-bold uppercase mb-1">Transcrição</div>
+                        <div class="text-slate-200 font-semibold">openai/whisper-large-v3</div>
+                        <div class="text-slate-400 text-xs mt-1">~1000 min/mês grátis</div>
+                    </div>
+                    <div class="p-3 rounded-xl" style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05);">
+                        <div class="text-slate-500 text-xs font-bold uppercase mb-1">Sumarização</div>
+                        <div class="text-slate-200 font-semibold">facebook/bart-large-cnn</div>
+                        <div class="text-slate-400 text-xs mt-1">Ilimitado (rate limited)</div>
+                    </div>
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5 block">Token Hugging Face</label>
+                    <div class="flex gap-2">
+                        <input type="password" id="hf-key" placeholder="hf_..." class="flex-1 px-4 py-2.5 rounded-xl text-sm text-white font-mono outline-none transition" style="background:#161622; border:1px solid rgba(255,255,255,0.08);">
+                        <button onclick="saveApiKey('hf')" class="px-4 py-2.5 rounded-xl text-sm font-bold text-white transition hover:opacity-80" style="background:rgba(251,191,36,0.2); border:1px solid rgba(251,191,36,0.2); color:#fbbf24;">Salvar</button>
+                    </div>
+                    <p class="text-xs text-slate-600 mt-1.5">Obtenha em: <a href="https://huggingface.co/settings/tokens" target="_blank" class="text-yellow-400 hover:text-yellow-300">huggingface.co/settings/tokens</a></p>
+                </div>
+
+                <!-- D-ID API Key — para VideoFala -->
+                <div class="pt-2" style="border-top:1px solid rgba(255,255,255,0.05);">
+                    <div class="flex items-center gap-2 mb-3">
+                        <div class="w-6 h-6 rounded-lg flex items-center justify-center" style="background:linear-gradient(135deg,#00ffcc,#00b38a);">
+                            <i data-lucide="video" class="w-3.5 h-3.5" style="color:#041a12;"></i>
+                        </div>
+                        <span class="text-sm font-black text-white">D-ID API — VideoFala</span>
+                        <span class="text-xs px-2 py-0.5 rounded-full font-bold" style="background:rgba(0,255,204,0.1);color:#00ffcc;border:1px solid rgba(0,255,204,0.2);">VideoFala IA</span>
+                    </div>
+                    <label class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5 block">D-ID API Key (Basic Auth — base64)</label>
+                    <div class="flex gap-2">
+                        <input type="password" id="did-key" placeholder="Cole sua chave D-ID aqui..." class="flex-1 px-4 py-2.5 rounded-xl text-sm text-white font-mono outline-none transition" style="background:#161622; border:1px solid rgba(0,255,204,0.15);">
+                        <button onclick="saveApiKey('did')" class="px-4 py-2.5 rounded-xl text-sm font-bold transition hover:opacity-80" style="background:rgba(0,255,204,0.15);border:1px solid rgba(0,255,204,0.3);color:#00ffcc;">Salvar</button>
+                    </div>
+                    <p class="text-xs text-slate-600 mt-1.5">Obtenha em: <a href="https://studio.d-id.com" target="_blank" style="color:#00ffcc;">studio.d-id.com</a> → Profile → API key (copie o valor Basic Auth completo)</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════════════ SETTINGS TAB ══════════════════ -->
+    <div id="tab-settings" class="tab-section flex-1 overflow-y-auto p-6 relative">
+        <div class="max-w-3xl mx-auto">
+            <h1 class="text-3xl font-black text-white mb-7 flex items-center gap-3">
+                <i data-lucide="settings" class="w-7 h-7 text-slate-400"></i> Configurações
+            </h1>
+            <div class="glass rounded-2xl p-6 mb-4 flex items-center gap-5">
+                <div class="w-20 h-20 rounded-2xl overflow-hidden shrink-0" style="background:linear-gradient(135deg,#2563eb,#7c3aed); padding:2px;">
+                    <div class="w-full h-full rounded-2xl overflow-hidden" style="background:#0a0a10;">
+                        <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" class="w-full h-full object-cover" alt="avatar"/>
+                    </div>
+                </div>
+                <div class="flex-1">
+                    <h2 class="text-xl font-black text-white">Felix Creator</h2>
+                    <p class="text-slate-400 text-sm mb-3">felix@viralcuts.ai</p>
+                    <button class="px-4 py-1.5 text-sm font-semibold text-white rounded-lg transition hover:bg-white/15" style="background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.1);">Editar Perfil</button>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="glass rounded-2xl p-5">
+                    <h3 class="text-base font-bold text-white mb-4 flex items-center gap-2"><i data-lucide="sliders" class="w-4 h-4 text-blue-400"></i> Preferências</h3>
+                    <div class="space-y-1">
+                        <div class="flex items-center justify-between py-3 cursor-pointer rounded-xl px-1 hover:bg-white/[0.02] transition" onclick="toggleSwitch(this)">
+                            <span class="text-sm text-slate-300">Aceleração GPU</span>
+                            <div class="w-10 h-5 rounded-full flex items-center px-0.5 toggle-bg" style="background:#7c3aed;">
+                                <div class="w-4 h-4 rounded-full bg-white toggle-dot" style="transform:translateX(20px);"></div>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between py-3 cursor-pointer rounded-xl px-1 hover:bg-white/[0.02] transition" onclick="toggleSwitch(this)">
+                            <span class="text-sm text-slate-300">Auto-Save</span>
+                            <div class="w-10 h-5 rounded-full flex items-center px-0.5 toggle-bg" style="background:#7c3aed;">
+                                <div class="w-4 h-4 rounded-full bg-white toggle-dot" style="transform:translateX(20px);"></div>
+                            </div>
+                        </div>
+                        <div class="pt-3 border-t" style="border-color:rgba(255,255,255,0.05);">
+                            <label class="text-xs text-slate-500 block mb-1.5">Idioma Padrão</label>
+                            <select class="w-full px-3 py-2 rounded-lg text-sm text-white outline-none" style="background:#161622; border:1px solid rgba(255,255,255,0.08);">
+                                <option>Português (Brasil)</option>
+                                <option>Inglês (EUA)</option>
+                                <option>Espanhol</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="glass rounded-2xl p-5">
+                    <h3 class="text-base font-bold text-white mb-4 flex items-center gap-2"><i data-lucide="film" class="w-4 h-4 text-purple-400"></i> Exportação</h3>
+                    <div class="space-y-3 text-sm">
+                        <div>
+                            <label class="text-xs text-slate-500 block mb-1.5">Qualidade Padrão</label>
+                            <select class="w-full px-3 py-2 rounded-lg text-sm text-white outline-none" style="background:#161622; border:1px solid rgba(255,255,255,0.08);">
+                                <option>1080p (Full HD)</option>
+                                <option>720p (HD)</option>
+                                <option>4K Ultra HD</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-xs text-slate-500 block mb-1.5">Formato</label>
+                            <select class="w-full px-3 py-2 rounded-lg text-sm text-white outline-none" style="background:#161622; border:1px solid rgba(255,255,255,0.08);">
+                                <option>MP4 (H.264)</option>
+                                <option>MP4 (H.265)</option>
+                                <option>WebM</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════════════ VIDEOFALA TAB ══════════════════ -->
+    <style>
+        #vf-texto::placeholder{color:#3a4a5c;}
+        #vf-texto{outline:none;}
+        .vf-dropzone{border:2px dashed rgba(0,255,153,0.25);transition:all .25s;}
+        .vf-dropzone:hover,.vf-dropzone.drag{border-color:#00ff99;background:rgba(0,255,153,0.05);}
+        @keyframes vf-slide-up{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+        .vf-slide-up{animation:vf-slide-up .4s ease both;}
+    </style>
+    <div id="tab-videofala" class="tab-section flex-1 overflow-y-auto" style="background:#0d0d14;">
+      <!-- conteúdo centralizado -->
+      <div class="flex flex-col items-center justify-start min-h-full px-6 py-12">
+
+        <!-- HEADER -->
+        <div class="text-center mb-10 vf-slide-up">
+          <div class="text-5xl mb-3">🎙️</div>
+          <h1 class="text-4xl font-black text-white mb-2" style="font-family:'Inter',sans-serif;letter-spacing:-0.02em;">VozNo<span style="background:linear-gradient(90deg,#00ff99,#00cc77);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;">Vídeo</span></h1>
+          <p class="text-base" style="color:#64748b;">Adicione voz ao seu vídeo grátis</p>
+        </div>
+
+        <!-- CARD CENTRAL -->
+        <div class="w-full vf-slide-up" style="max-width:580px;animation-delay:.08s;">
+          <div class="rounded-2xl overflow-hidden" style="background:#12121e;border:1px solid rgba(255,255,255,0.07);box-shadow:0 24px 60px rgba(0,0,0,0.5);">
+
+            <!-- ── UPLOAD DO VÍDEO ── -->
+            <div class="p-6" style="border-bottom:1px solid rgba(255,255,255,0.06);">
+              <label class="text-xs font-black uppercase tracking-widest mb-3 block" style="color:#00ff99;">📁 Seu vídeo (.mp4)</label>
+              <div id="vf-dropzone"
+                class="vf-dropzone rounded-xl flex flex-col items-center justify-center gap-3 cursor-pointer relative overflow-hidden"
+                style="height:140px;background:rgba(0,255,153,0.02);"
+                onclick="document.getElementById('vf-file-input').click()"
+                ondragover="event.preventDefault();this.classList.add('drag')"
+                ondragleave="this.classList.remove('drag')"
+                ondrop="event.preventDefault();this.classList.remove('drag');vfHandleFile(event.dataTransfer.files[0])">
+
+                <!-- ícone padrão -->
+                <div id="vf-drop-icon" class="flex flex-col items-center gap-2 pointer-events-none">
+                  <span class="text-3xl">📁</span>
+                  <p class="text-sm font-semibold text-white">Arraste seu vídeo aqui ou clique para selecionar</p>
+                  <p class="text-xs" style="color:#475569;">Aceita apenas .mp4</p>
+                </div>
+
+                <!-- arquivo selecionado -->
+                <div id="vf-file-selected" class="hidden flex-col items-center gap-2 pointer-events-none">
+                  <span class="text-3xl">✅</span>
+                  <p id="vf-file-name" class="text-sm font-bold text-white text-center px-4 truncate" style="max-width:480px;"></p>
+                  <button class="pointer-events-auto text-xs px-3 py-1 rounded-lg transition-all" style="color:#64748b;background:rgba(255,255,255,0.06);"
+                    onclick="event.stopPropagation();vfClearFile()">✕ Remover</button>
+                </div>
+              </div>
+              <input id="vf-file-input" type="file" accept=".mp4,video/mp4" class="hidden" onchange="vfHandleFile(this.files[0])"/>
+            </div>
+
+            <!-- ── TEXTAREA DO TEXTO ── -->
+            <div class="p-6" style="border-bottom:1px solid rgba(255,255,255,0.06);">
+              <label class="text-xs font-black uppercase tracking-widest mb-3 block" style="color:#00ff99;">Texto para narração</label>
+              <textarea id="vf-texto"
+                placeholder="Cole aqui o texto que será narrado no vídeo..."
+                oninput="document.getElementById('vf-char-count').textContent=this.value.length+' chars'"
+                onfocus="this.style.borderColor='rgba(0,255,153,0.5)'"
+                onblur="this.style.borderColor='rgba(255,255,255,0.08)'"
+                class="w-full resize-none rounded-xl text-sm leading-7"
+                style="background:#0d0d14;border:1.5px solid rgba(255,255,255,0.08);padding:14px 16px;color:#e2e8f0;font-family:'Inter',sans-serif;min-height:120px;caret-color:#00ff99;transition:border-color .2s;"
+              ></textarea>
+              <div class="flex justify-end mt-1.5">
+                <span id="vf-char-count" class="text-xs tabular-nums" style="color:#334155;">0 chars</span>
+              </div>
+            </div>
+
+            <!-- ── BOTÃO GERAR ── -->
+            <div class="p-6">
+              <button id="vf-btn-gerar" onclick="vfGerar()"
+                class="w-full flex items-center justify-center gap-3 font-black text-base rounded-xl transition-all duration-200"
+                style="padding:15px;background:linear-gradient(135deg,#00ff99,#00cc77);color:#061a0d;border-radius:12px;box-shadow:0 8px 28px rgba(0,255,153,0.3);"
+                onmouseover="this.style.transform='scale(1.02)';this.style.boxShadow='0 12px 36px rgba(0,255,153,0.45)'"
+                onmouseout="this.style.transform='';this.style.boxShadow='0 8px 28px rgba(0,255,153,0.3)'">
+                <i data-lucide="sparkles" class="w-5 h-5"></i>
+                Gerar Vídeo
+              </button>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- ── ÁREA DE RESULTADO ── -->
+        <div id="vf-resultado" class="hidden w-full mt-8 vf-slide-up" style="max-width:580px;">
+          <div class="rounded-2xl p-8 text-center" style="background:#12121e;border:1px solid rgba(0,255,153,0.2);box-shadow:0 0 40px rgba(0,255,153,0.06);">
+            <div class="text-4xl mb-3">✅</div>
+            <h3 class="text-xl font-black text-white mb-1">Vídeo pronto!</h3>
+            <div class="rounded-xl p-3 mb-6 text-left" style="background:rgba(0,255,153,0.04);border:1px solid rgba(0,255,153,0.1);">
+              <p class="text-xs font-black uppercase tracking-widest mb-1" style="color:#00ff99;">Narração gerada pela IA</p>
+              <p id="vf-texto-gerado" class="text-sm leading-relaxed" style="color:#94a3b8;"></p>
+            </div>
+            <a id="vf-btn-baixar" href="#" target="_blank"
+              class="flex items-center justify-center gap-3 font-black text-base rounded-xl mb-3 transition-all"
+              style="padding:15px;background:linear-gradient(135deg,#00ff99,#00cc77);color:#061a0d;border-radius:12px;text-decoration:none;box-shadow:0 8px 28px rgba(0,255,153,0.3);"
+              onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform=''">
+              ⬇️ Baixar Vídeo
+            </a>
+            <button onclick="vfReset()"
+              class="w-full py-3 rounded-xl text-sm font-bold transition-all"
+              style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:#64748b;"
+              onmouseover="this.style.color='#e2e8f0';this.style.background='rgba(255,255,255,0.08)'"
+              onmouseout="this.style.color='#64748b';this.style.background='rgba(255,255,255,0.04)'">
+              Gerar outro
+            </button>
+          </div>
+        </div>
+
+        <!-- Loading overlay fullscreen -->
+        <div id="vf-loading" class="hidden fixed inset-0 z-50 flex flex-col items-center justify-center gap-6" style="background:rgba(13,13,20,0.92);backdrop-filter:blur(8px);">
+          <div class="relative">
+            <div style="width:72px;height:72px;border-radius:50%;border:3px solid rgba(0,255,153,0.12);border-top:3px solid #00ff99;animation:spin-slow 0.9s linear infinite;"></div>
+            <div style="width:50px;height:50px;border-radius:50%;border:2px solid transparent;border-bottom:2px solid rgba(0,255,153,0.5);position:absolute;top:11px;left:11px;animation:spin-reverse 0.65s linear infinite;"></div>
+          </div>
+          <div class="text-center">
+            <p class="text-lg font-black text-white mb-2">Gerando...</p>
+            <p id="vf-loading-step" class="text-sm" style="color:#00ff99;">Aguarde</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+</main><!-- end main -->
+</div><!-- end flex row -->
+
+<!-- ─────────── Toast ─────────── -->
+<div id="toast" class="fixed bottom-6 right-6 z-[100] transition-all duration-500 opacity-0 translate-y-4 pointer-events-none">
+    <div class="flex items-center gap-3 px-5 py-3.5 rounded-xl shadow-2xl" style="background:#1a1a28; border:1px solid rgba(168,85,247,0.3); backdrop-filter:blur(20px);">
+        <i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-400 shrink-0"></i>
+        <span id="toast-msg" class="text-sm font-semibold text-white"></span>
+    </div>
+</div>
+
+<script>
+'use strict';
+// ─── ELECTRON / BACKEND ───────────────────────────────────────────────
+const IS_ELECTRON = !!window.electronAPI;
+const BACKEND_URL = IS_ELECTRON ? window.electronAPI.BACKEND_URL : 'https://e69a-136-248-122-245.ngrok-free.app';
+
+if (IS_ELECTRON) {
+    document.getElementById('titlebar').classList.remove('hidden');
+    document.getElementById('titlebar').classList.add('flex');
+    window.electronAPI.onWindowState(state => {
+        document.getElementById('btn-max').textContent = state === 'maximized' ? '❐' : '□';
+    });
+}
+
+// ─── DATA ───────────────────────────────────────────────────────────
+const mockShorts = [
+    { id:1, title:"O Segredo do Sucesso",     score:99, duration:"0:45", hook:"Você nunca vai acreditar nisso...", start:0,   end:45  },
+    { id:2, title:"Como Ficar Rico em 2026",  score:95, duration:"0:58", hook:"A regra número 1 do dinheiro...",  start:45,  end:103 },
+    { id:3, title:"Corte Engraçado Podcast",  score:92, duration:"0:32", hook:"E aí ele disse que...",            start:103, end:135 },
+    { id:4, title:"Dica de Produtividade",    score:88, duration:"0:40", hook:"Pare de perder tempo com...",      start:135, end:175 },
+    { id:5, title:"História de Superação",    score:85, duration:"0:55", hook:"Quando eu estava no fundo...",     start:175, end:230 }
+];
+const mockTemplates = [
+    { id:1, name:"Hormozi Style",   cat:"Negócios",   grad:"linear-gradient(135deg,#f59e0b,#ef4444)", desc:"Legendas amarelas com emojis em destaque. Alto impacto." },
+    { id:2, name:"Podcast Split",   cat:"Entrevista", grad:"linear-gradient(135deg,#2563eb,#06b6d4)", desc:"Tela dividida. Ideal para 2 speakers." },
+    { id:3, name:"Gaming Zoom",     cat:"Jogos",      grad:"linear-gradient(135deg,#7c3aed,#ec4899)", desc:"Facecam no topo com zoom automático." },
+    { id:4, name:"News Reporter",   cat:"Notícias",   grad:"linear-gradient(135deg,#dc2626,#b91c1c)", desc:"Tarja inferior com texto rolando." },
+    { id:5, name:"Minimalist VLog", cat:"Lifestyle",  grad:"linear-gradient(135deg,#94a3b8,#e2e8f0)", desc:"Legendas elegantes em branco." },
+    { id:6, name:"Neon Cyberpunk",  cat:"Tech",       grad:"linear-gradient(135deg,#10b981,#06b6d4)", desc:"Bordas neon com efeito glitch." }
+];
+
+// ─── STATE ───────────────────────────────────────────────────────────
+let videoFileUrl      = null;
+let videoLocalPath    = null;
+let currentJobId      = null;
+let currentShortId    = 1;
+let currentTab        = 'projects';
+let currentStep       = 'upload';
+let transcriptData    = null;
+let targetDuration    = 45;   // seconds — user-selected short length
+let targetQty         = 5;    // number of clips to generate
+let targetPlatform    = 'tiktok';
+
+// ─── DURATION / QTY / PLATFORM SELECTORS ────────────────────────────
+const DUR_HINTS = {
+    15: '15s — Ideal para Reels e TikTok rapido',
+    20: '20s — Gancho rapido, alta retencao',
+    30: '30s — Equilibrio viral perfeito',
+    45: '45s — Melhor retencao no TikTok ★',
+    60: '1 min — YouTube Shorts longo',
+    90: '90s — Conteudo profundo / podcast',
+};
+
+function setDuration(sec) {
+    targetDuration = sec;
+    document.querySelectorAll('.dur-btn').forEach(b => {
+        const active = parseInt(b.textContent) === sec || b.textContent.includes(sec === 60 ? '1 min' : sec + 's');
+        b.classList.toggle('active-dur', active);
+        b.style.background = active ? 'rgba(124,58,237,0.25)' : 'rgba(255,255,255,0.04)';
+        b.style.border     = active ? '1px solid rgba(168,85,247,0.4)' : '1px solid rgba(255,255,255,0.07)';
+        b.style.color      = active ? '#fff' : '#94a3b8';
+        b.style.boxShadow  = active ? '0 0 8px rgba(124,58,237,0.3)' : '';
+    });
+    const lbl = document.getElementById('dur-label');
+    if (lbl) lbl.textContent = sec >= 60 ? Math.floor(sec/60) + ' min' : sec + 's';
+    const hint = document.getElementById('dur-hint');
+    if (hint) hint.firstChild.textContent = DUR_HINTS[sec] ? DUR_HINTS[sec].split('—')[1]?.trim() || '' : '';
+}
+
+function setQty(n) {
+    targetQty = n;
+    document.querySelectorAll('.qty-btn').forEach(b => {
+        const active = parseInt(b.textContent) === n;
+        b.classList.toggle('active-qty', active);
+        b.style.background = active ? 'rgba(37,99,235,0.25)'   : 'rgba(255,255,255,0.04)';
+        b.style.border     = active ? '1px solid rgba(96,165,250,0.4)' : '1px solid rgba(255,255,255,0.07)';
+        b.style.color      = active ? '#fff' : '#94a3b8';
+    });
+}
+
+function setPlatform(el, id) {
+    targetPlatform = id;
+    document.querySelectorAll('.plat-btn').forEach(b => {
+        const active = b === el;
+        b.style.background = active ? 'rgba(20,20,20,0.9)' : 'rgba(255,255,255,0.04)';
+        b.style.border     = active ? '1px solid rgba(255,255,255,0.2)' : '1px solid rgba(255,255,255,0.07)';
+        b.style.color      = active ? '#fff' : '#94a3b8';
+    });
+}
+
+// ─── UTILS ──────────────────────────────────────────────────────────
+function showToast(msg) {
+    const t = document.getElementById('toast');
+    document.getElementById('toast-msg').textContent = msg;
+    t.classList.remove('opacity-0','translate-y-4','pointer-events-none');
+    setTimeout(() => t.classList.add('opacity-0','translate-y-4','pointer-events-none'), 3000);
+}
+
+function toggleSwitch(el) {
+    const bg  = el.querySelector('.toggle-bg');
+    const dot = el.querySelector('.toggle-dot');
+    if (bg.style.background.includes('#7c3aed') || bg.style.backgroundColor === 'rgb(124, 58, 237)') {
+        bg.style.background = '#334155';
+        dot.style.transform = 'translateX(0)';
+    } else {
+        bg.style.background = '#7c3aed';
+        dot.style.transform = 'translateX(20px)';
+    }
+}
+
+// ─── NAVIGATION ──────────────────────────────────────────────────────
+function switchTab(id) {
+    currentTab = id;
+    document.querySelectorAll('.tab-section').forEach(el => el.classList.remove('active'));
+    document.getElementById(`tab-${id}`).classList.add('active');
+
+    ['projects','templates','api','settings','videofala'].forEach(n => {
+        const btn = document.getElementById(`nav-${n}`);
+        if (!btn) return;
+        if (n === id) {
+            btn.classList.add('nav-active');
+        } else {
+            btn.classList.remove('nav-active');
+        }
+    });
+
+    const bc = document.getElementById('breadcrumb');
+    bc.style.display = id === 'projects' ? 'flex' : 'none';
+}
+
+function setStep(id) {
+    currentStep = id;
+    document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+    document.getElementById(`step-${id}`).classList.add('active');
+
+    const titles = { upload:'Novo Projeto', processing:'Processando IA', results:'Resultados', editor:'Editor Avançado' };
+    document.getElementById('header-title').textContent = titles[id] || id;
+
+    const btn = document.getElementById('btn-new-video');
+    btn.classList.toggle('hidden', !(id === 'results' || id === 'editor'));
+}
+
+// ─── FILE UPLOAD ─────────────────────────────────────────────────────
+const dropzone = document.getElementById('dropzone');
+dropzone.addEventListener('click', () => { IS_ELECTRON ? openNativeFilePicker() : document.getElementById('file-upload').click(); });
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag-over'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+dropzone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropzone.classList.remove('drag-over');
+    if (e.dataTransfer.files[0]) handleFileSelect(e.dataTransfer.files[0]);
+});
+
+function handleFileSelect(file) {
+    if (!file || !file.type.includes('video')) { showToast('Selecione um vídeo válido.'); return; }
+    videoLocalPath = null; // blob — sem path real
+    const url = URL.createObjectURL(file);
+    _onVideoReady(url, file.name, (file.size/(1024*1024)).toFixed(1) + ' MB');
+}
+
+async function openNativeFilePicker() {
+    const filePath = await window.electronAPI.selectVideo();
+    if (!filePath) return;
+    try {
+        const res  = await fetch(`${BACKEND_URL}/api/register-path`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({path:filePath}) });
+        const data = await res.json();
+        if (data.ok) {
+            videoLocalPath = filePath;
+            const url = await window.electronAPI.getFilePath(filePath);
+            _onVideoReady(url, filePath.split(/[\\/]/).pop(), null);
+        } else { showToast('Arquivo não encontrado.'); }
+    } catch(e) {
+        // backend offline — use localfile:/// (triple slash preserves C: drive colon)
+        videoLocalPath = filePath;
+        _onVideoReady(`localfile:///${filePath.replace(/\\/g,'/')}`, filePath.split(/[\\/]/).pop(), null);
+    }
+}
+
+function _onVideoReady(url, name, sizeLabel) {
+    console.log(`[VIDEO] Carregando: ${name} | URL: ${url.substring(0,80)}`);
+    videoFileUrl = url;
+    const pv = document.getElementById('preview-video');
+    pv.src = url;  pv.classList.remove('hidden');
+    document.getElementById('result-video').src = url;
+    document.getElementById('editor-video').src  = url;
+
+    // LOG: eventos de carregamento do vídeo principal
+    const resultVid = document.getElementById('result-video');
+    resultVid.addEventListener('loadedmetadata', () => console.log(`[VÍDEO result] metadata carregada — duração: ${resultVid.duration?.toFixed(2)}s, muted: ${resultVid.muted}`));
+    resultVid.addEventListener('canplay', () => console.log('[VÍDEO result] canplay ✓'));
+    resultVid.addEventListener('error', e => console.error('[VÍDEO result] ERRO:', resultVid.error?.message, resultVid.error?.code));
+    const edVid = document.getElementById('editor-video');
+    edVid.addEventListener('loadedmetadata', () => console.log(`[VÍDEO editor] metadata carregada — duração: ${edVid.duration?.toFixed(2)}s, muted: ${edVid.muted}`));
+    edVid.addEventListener('error', e => console.error('[VÍDEO editor] ERRO:', edVid.error?.message, edVid.error?.code));
+    document.getElementById('upload-ui').classList.add('hidden');
+    document.getElementById('file-info').classList.remove('hidden');
+    document.getElementById('file-name').textContent = name.length > 32 ? name.substring(0,32)+'…' : name;
+    document.getElementById('file-size').textContent = sizeLabel || '';
+    const btn = document.getElementById('btn-generate');
+    btn.removeAttribute('disabled');
+    btn.style.cssText = 'background:linear-gradient(135deg,#2563eb,#7c3aed);color:white;cursor:pointer;border:1px solid rgba(168,85,247,0.3);box-shadow:0 0 20px rgba(124,58,237,0.4);';
+    showToast('Vídeo carregado! Clique em "Gerar Shorts".');
+}
+
+// ─── PROCESSING ──────────────────────────────────────────────────────
+async function startProcessing() {
+    if (!videoFileUrl && !videoLocalPath) return;
+    setStep('processing');
+    const pVal  = document.getElementById('progress-value');
+    const pText = document.getElementById('progress-text');
+    const steps = document.querySelectorAll('#processing-steps .step-pill');
+    const groqKey = localStorage.getItem('api_groq') || '';
+    const orKey   = localStorage.getItem('api_openrouter') || '';
+
+    if (videoLocalPath) {
+        try {
+            const res  = await fetch(`${BACKEND_URL}/api/process`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ path:videoLocalPath, settings:{ groqKey, openrouterKey:orKey, target_duration:targetDuration, max_clips:targetQty, platform:targetPlatform } }) });
+            const data = await res.json();
+            if (data.job_id) { currentJobId = data.job_id; _pollJob(currentJobId, pVal, pText, steps); return; }
+        } catch(e) { console.warn('Backend offline, simulando'); }
+    }
+    _simulateProcessing(pVal, pText, steps);
+}
+
+function _pollJob(jobId, pVal, pText, steps) {
+    const iv = setInterval(async () => {
+        try {
+            const job = await fetch(`${BACKEND_URL}/api/process/${jobId}`).then(r=>r.json());
+            const p   = job.progress || 0;
+            pVal.textContent = `${p}%`;
+            if (job.message) pText.textContent = job.message;
+            const si = Math.min(Math.floor((p/100)*steps.length), steps.length-1);
+            steps.forEach((s,i) => { s.classList.remove('done','active','pending'); s.classList.add(i<si?'done':i===si?'active':'pending'); });
+            lucide.createIcons();
+            if (job.status === 'done') {
+                clearInterval(iv);
+                steps.forEach(s => { s.classList.remove('active','pending'); s.classList.add('done'); });
+                if (job.results?.length) {
+                    transcriptData = job.transcript || null;
+                    mockShorts.splice(0, mockShorts.length, ...job.results.map((m,i) => ({
+                        id:             i + 1,
+                        title:          m.title,
+                        score:          m.score,
+                        duration:       m.duration || `0:${Math.round((m.end||30)-(m.start||0))}`,
+                        hook:           m.hook,
+                        start:          m.start  || 0,
+                        end:            m.end    || 45,
+                        video:          m.video  || videoLocalPath,
+                        segments:       m.segments || [],
+                        // ── campos críticos que estavam sendo descartados ──
+                        srt:            m.srt            || '',
+                        vtt:            m.vtt            || '',
+                        vtt_url:        m.vtt_url        || '',
+                        has_burned_subs: m.has_burned_subs === true, // garante boolean
+                        reason:         m.reason         || '',
+                    })));
+                    console.log('[Poll] has_burned_subs dos clipes:', mockShorts.map(s => `#${s.id}=${s.has_burned_subs}`).join(', '));
+                }
+                setTimeout(() => { renderShortsList(); setStep('results'); }, 600);
+            } else if (job.status === 'error') {
+                clearInterval(iv); showToast('Erro: '+(job.error||'falhou')); setStep('upload');
+            }
+        } catch(e) { clearInterval(iv); _simulateProcessing(pVal, pText, steps); }
+    }, 900);
+}
+
+function _simulateProcessing(pVal, pText, steps) {
+    const labels = ["Extraindo áudio...","Transcrevendo Whisper...","Analisando LLM...","Detectando virais...","Auto-Crop 9:16...","Gerando legendas...","Finalizando!"];
+    let progress = 0;
+    steps[0].classList.replace('pending','active');
+    const iv = setInterval(() => {
+        progress = Math.min(progress + Math.floor(Math.random()*14)+4, 100);
+        pVal.textContent = `${progress}%`;
+        const si = Math.min(Math.floor((progress/100)*steps.length), steps.length-1);
+        pText.textContent = labels[si];
+        steps.forEach((s,i) => { s.classList.remove('done','active','pending'); s.classList.add(i<si?'done':i===si?'active':'pending'); });
+        lucide.createIcons();
+        if (progress >= 100) {
+            clearInterval(iv);
+            steps.forEach(s => { s.classList.remove('active','pending'); s.classList.add('done'); });
+            setTimeout(() => { renderShortsList(); setStep('results'); }, 600);
+        }
+    }, 750);
+}
+
+// ─── EXPORT ───────────────────────────────────────────────────────────
+async function exportCurrentShort() {
+    const short = mockShorts.find(s => s.id === currentShortId) || mockShorts[0];
+    if (!short) return;
+    await exportShort(short);
+}
+
+// Mapeia classe CSS de legenda → nome de estilo FFmpeg suportado pelo backend
+function _getFFmpegStyle() {
+    const cssToFFmpeg = {
+        'sub-white':   'white',
+        'sub-yellow':  'yellow',
+        'sub-box':     'box',
+        'sub-neon':    'white',
+        'sub-fire':    'yellow',
+        'sub-outline': 'white',
+        'sub-3d':      'white',
+        'sub-pink':    'white',
+        'sub-matrix':  'box',
+        'sub-gold':    'yellow',
+        'sub-glitch':  'white',
+        'sub-bounce':  'white',
+    };
+    return cssToFFmpeg[_getSubClass()] || 'white';
+}
+
+async function exportShort(short, fromEditor = false) {
+    const btn = document.getElementById('btn-export-hd');
+    if (btn) { btn.textContent = 'Exportando...'; btn.disabled = true; }
+
+    if (videoLocalPath) {
+        try {
+            let outPath = null;
+            if (IS_ELECTRON) {
+                const safeName = (short.title||'short').replace(/[^a-z0-9]/gi,'_');
+                outPath = await window.electronAPI.saveFile(`${safeName}.mp4`);
+                if (!outPath) { _resetExportBtn(btn); return; }
+            }
+
+            const ffmpegStyle = _getFFmpegStyle();
+            const fontSz      = ED.fontSize || 22;
+            const styleLabel  = SUB_LABELS[ED.style] || 'Classic';
+            console.log(`[Export] estilo="${styleLabel}" → FFmpeg="${ffmpegStyle}" | fontSize=${fontSz}px | fromEditor=${fromEditor} | srt=${short.srt}`);
+            if (btn) btn.textContent = `Exportando (${styleLabel} ${fontSz}px)...`;
+
+            let body;
+            if (fromEditor || short.srt) {
+                // Sempre re-encodar quando tem SRT — garante estilo e tamanho corretos
+                if (short.srt) {
+                    body = { path: videoLocalPath, start: short.start||0, end: short.end||45, srt_path: short.srt, style: ffmpegStyle, font_size: fontSz, output_path: outPath||null };
+                } else {
+                    console.warn('[Export] Sem SRT — exportando sem legenda queimada');
+                    body = { path: videoLocalPath, start: short.start||0, end: short.end||45, output_path: outPath||null };
+                }
+            } else if (short.video && short.video !== videoLocalPath) {
+                // Sem SRT: copia clipe pré-gerado (fast path)
+                console.log(`[Export] Copiando clipe pré-gerado: ${short.video}`);
+                body = { source_clip: short.video, output_path: outPath||null };
+            } else {
+                body = { path: videoLocalPath, start: short.start||0, end: short.end||45, output_path: outPath||null };
+            }
+
+            const res  = await fetch(`${BACKEND_URL}/api/export`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            const data = await res.json();
+            if (data.ok) {
+                showToast('Exportado: ' + (outPath || data.output).split(/[\\/]/).pop());
+            } else { showToast('Erro ao exportar: ' + data.error); }
+        } catch(e) { console.error('[Export]', e); showToast('Backend offline. Tente iniciar o servidor.'); }
+    } else {
+        showToast('No modo browser, exporte o video original manualmente.');
+    }
+    _resetExportBtn(btn);
+}
+
+function _resetExportBtn(btn) {
+    if (!btn) return;
+    btn.disabled = false;
+    btn.innerHTML = '<i data-lucide="download" class="w-4 h-4"></i> Exportar HD (1080p)';
+    lucide.createIcons();
+}
+
+async function exportAllShorts() {
+    showToast(`Exportando ${mockShorts.length} clipes...`);
+    for (const short of mockShorts) {
+        await exportShort(short);
+        await new Promise(r => setTimeout(r, 300));
+    }
+    showToast('✅ Todos os clipes exportados!');
+}
+
+// ─── SHORTS LIST ─────────────────────────────────────────────────────
+function _resolveVideoSrc(short) {
+    if (!short) return videoFileUrl || '';
+    if (short.video) {
+        if (IS_ELECTRON && short.video.match(/^[A-Za-z]:[\\\/]/)) {
+            // Triple slash → drive letter stays in URL path, not host section
+            return `localfile:///${short.video.replace(/\\/g, '/')}`;
+        }
+        return `${BACKEND_URL}/api/file?path=${encodeURIComponent(short.video)}`;
+    }
+    return videoFileUrl || '';
+}
+
+function selectShort(id) {
+    currentShortId = id;
+    const s = mockShorts.find(x => x.id === id);
+    if (!s) return;
+
+    // Update UI labels
+    const titleEl = document.getElementById('selected-title');
+    const scoreEl = document.getElementById('selected-score');
+    if (titleEl) titleEl.textContent = s.title;
+    if (scoreEl) scoreEl.textContent = `${s.score}%`;
+    document.getElementById('editor-title').textContent = s.title;
+    const ring = document.getElementById('score-ring');
+    if (ring) ring.style.strokeDashoffset = 251 - (251 * s.score / 100);
+
+    // Build segments FIRST (before any subtitle sync)
+    ED.short    = s;
+    ED.segments = (s.segments && s.segments.length > 0)
+        ? s.segments
+        : _buildDemoSegments(s);
+
+    // Show first subtitle only if clip does NOT have burned-in subs
+    if (s.has_burned_subs === true) {
+        _disableResultOverlay();
+    } else {
+        _enableResultOverlay();
+        const el = document.getElementById('result-sub-overlay');
+        if (el && ED.segments[0]) _updateResultOverlay(el, ED.segments[0].text);
+    }
+
+    // Switch video source
+    const vid    = document.getElementById('result-video');
+    const newSrc = _resolveVideoSrc(s);
+    if (newSrc && vid.src !== newSrc) {
+        vid.src   = newSrc;
+        vid.muted = _resultMuted;
+        vid.load();
+        vid.play().catch(() => {});
+    }
+
+    // Wire subtitle sync with new segments
+    _loadResultVTT(s);
+    renderShortsList(id);
+}
+
+function renderShortsList(selId = 1) {
+    const c = document.getElementById('shorts-list');
+    c.innerHTML = '';
+    const cnt = document.querySelector('#step-results .text-xs.font-bold.px-2\\.5');
+    if (cnt) cnt.textContent = `${mockShorts.length} clipes`;
+    mockShorts.forEach((s,i) => {
+        const sel        = s.id === selId;
+        const scoreColor = s.score > 90 ? '#10b981' : s.score > 80 ? '#f59e0b' : '#60a5fa';
+        const scoreBg    = s.score > 90 ? 'rgba(16,185,129,0.1)' : s.score > 80 ? 'rgba(245,158,11,0.1)' : 'rgba(96,165,250,0.1)';
+        c.innerHTML += `
+        <div onclick="selectShort(${s.id})" class="p-4 rounded-xl cursor-pointer transition-all duration-200 relative overflow-hidden"
+             style="background:${sel?'rgba(124,58,237,0.12)':'rgba(255,255,255,0.02)'};border:1px solid ${sel?'rgba(168,85,247,0.35)':'rgba(255,255,255,0.05)'};${sel?'box-shadow:0 0 20px rgba(124,58,237,0.15);':''}">
+            ${sel?'<div class="absolute left-0 top-0 bottom-0 w-0.5 rounded-l" style="background:linear-gradient(to bottom,#60a5fa,#a855f7);"></div>':''}
+            <div class="flex items-center justify-between mb-2.5">
+                <div class="flex items-center gap-2">
+                    <span class="text-[11px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1" style="background:${scoreBg};color:${scoreColor};border:1px solid ${scoreColor}33;">
+                        <i data-lucide="zap" class="w-2.5 h-2.5 fill-current"></i>${s.score}
+                    </span>
+                    <span class="text-[11px] text-slate-500 flex items-center gap-1" style="background:rgba(0,0,0,0.3);padding:2px 8px;border-radius:6px;">
+                        <i data-lucide="clock" class="w-2.5 h-2.5"></i>${s.duration}
+                    </span>
+                </div>
+                <span class="text-xs font-black" style="color:rgba(255,255,255,${sel?'0.2':'0.06'});">#${i+1}</span>
+            </div>
+            <h3 class="font-bold text-sm mb-1 truncate" style="color:${sel?'white':'#e2e8f0'};">${s.title}</h3>
+            <p class="text-[12px] text-slate-500 truncate italic">"${s.hook}"</p>
+        </div>`;
+    });
+    lucide.createIcons();
+    const ring = document.getElementById('score-ring');
+    const sn   = mockShorts.find(x => x.id === selId);
+    if (ring && sn) ring.style.strokeDashoffset = 251 - (251*sn.score/100);
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// ─── EDITOR ENGINE ────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════
+const ED = {
+    short:      null,
+    segments:   [],
+    style:      0,
+    fontSize:   22,
+    playing:    false,
+    muted:      false,
+    zoomFactor: 1,
+    history:    [],
+    future:     [],
+    clipStart:  0,
+    clipEnd:    null,
+    isClip:     false,
+    rafId:      null,
+};
+
+const fmt = s => { const m=Math.floor(s/60),sec=Math.floor(s%60); return `${m.toString().padStart(2,'0')}:${sec.toString().padStart(2,'0')}`; };
+
+function initEditor(short) {
+    // ── stop any previous RAF loop ──────────────────────────────────────
+    if (ED.rafId) { cancelAnimationFrame(ED.rafId); ED.rafId = null; }
+
+    ED.short     = short;
+    ED.history   = [];
+    ED.future    = [];
+    ED.playing   = false;
+    
+    // For the Advanced Editor, we ALWAYS use the original video to avoid burned-in subs.
+    // The CSS object-cover will naturally center-crop it to 9:16 for accurate preview.
+    ED.isClip    = false;
+    ED.clipStart = short.start || 0;
+    ED.clipEnd   = short.end || (short.start + (short.duration ? parseFloat(short.duration) : 45)) || 45;
+    _activeSubIdx = -2; // reset highlight debounce for new clip
+
+    ED.segments = JSON.parse(JSON.stringify(
+        (short.segments && short.segments.length > 0)
+            ? short.segments
+            : _buildDemoSegments(short)
+    ));
+
+    // Converter os segmentos para tempo absoluto (se estiverem em tempo relativo do clipe)
+    // para casar com o currentTime do vídeo original (que toca do meio).
+    if (short.start && short.start > 0 && ED.segments.length > 0) {
+        if (ED.segments[0].start < short.start - 0.5) {
+            ED.segments.forEach(s => {
+                s.start += short.start;
+                if (s.end) s.end += short.start;
+            });
+        }
+    }
+
+    console.log(`[EDITOR] init | id=${short?.id} isClip=${ED.isClip} segs=${ED.segments.length}`);
+
+    const vid = document.getElementById('editor-video');
+    // Force the original video source to avoid burned-in subtitles overlapping HTML styles
+    let src = videoFileUrl || '';
+    if (videoLocalPath && !src) {
+        if (IS_ELECTRON && videoLocalPath.match(/^[A-Za-z]:[\\\/]/)) {
+            src = `localfile:///${videoLocalPath.replace(/\\/g, '/')}`;
+        } else {
+            src = `${BACKEND_URL}/api/file?path=${encodeURIComponent(videoLocalPath)}`;
+        }
+    }
+
+    // ── remove ALL old event listeners before touching the source ────────
+    vid.ontimeupdate     = null;
+    vid.onended          = null;
+    vid.onloadedmetadata = null;
+    vid.onerror          = null;
+    vid.muted = ED.muted;
+
+    const _applyAfterMeta = () => {
+        // Fallback clipEnd if it wasn't available
+        if (!ED.clipEnd || ED.clipEnd > vid.duration) {
+            ED.clipEnd = vid.duration || ED.clipEnd;
+        }
+        // Seek: always to clipStart
+        const seekTo = ED.clipStart;
+        vid.currentTime = seekTo;
+        _updateTimeDisplay(seekTo);
+        console.log(`[EDITOR] ready — dur=${vid.duration?.toFixed(2)}s seekTo=${seekTo}s`);
+        _startEditorRaf();
+    };
+
+    vid.onerror = () => console.error('[EDITOR] Erro ao carregar:', vid.src, vid.error?.code);
+
+    if (src && src !== vid.src) {
+        vid.onloadedmetadata = _applyAfterMeta;
+        vid.src = src;
+        vid.load();
+    } else if (src) {
+        if (vid.readyState >= 1) {
+            _applyAfterMeta();
+        } else {
+            vid.onloadedmetadata = _applyAfterMeta;
+        }
+    }
+
+    vid.onended = () => {
+        vid.currentTime = ED.clipStart;
+        vid.pause();
+        ED.playing = false;
+        _updatePlayBtns(false);
+    };
+
+    // Remove any legacy cover divs from previous sessions
+    const oldCover = document.getElementById('burned-sub-cover');
+    if (oldCover) oldCover.remove();
+
+    // O overlay SEMPRE visível no editor — o fundo dark-gradient (definido no HTML)
+    // cobre as burned subs e o texto estilizado aparece por cima.
+    // NÃO usar display:none pois remove a prévia do estilo.
+    const subEl = document.getElementById('editor-sub-overlay');
+    subEl.classList.remove('sub-overlay-cover');
+    subEl.style.display = '';
+    _updateSubOverlay(ED.segments[0]?.text || '');
+
+    _updatePlayBtns(false);
+    _updateTimeDisplay(ED.isClip ? 0 : (short.start || 0));
+    _renderSubList();
+    _renderTimelineSubTrack();
+
+    // ── Start RAF immediately (not waiting for metadata) so styles update ─
+    _startEditorRaf();
+
+    // ── Apply initial style and font size button states ────────────────────
+    setSubStyle(ED.style);
+    setFontSize(ED.fontSize);
+
+    // ── Init timeline drag (only once — checks flag) ───────────────────────
+    if (!window._tlDragInited) {
+        window._tlDragInited = true;
+        _initTimelineDrag();
+    }
+}
+
+// ── RAF loop for smooth subtitle sync (replaces ontimeupdate) ──────────
+function _startEditorRaf() {
+    if (ED.rafId) cancelAnimationFrame(ED.rafId);
+    const vid = document.getElementById('editor-video');
+
+    const tick = () => {
+        if (!ED.short) { ED.rafId = null; return; }
+        const t = vid.currentTime;
+
+        // loop within clip bounds
+        const clipEnd = ED.clipEnd ?? vid.duration ?? 9999;
+        if (clipEnd && t >= clipEnd) {
+            vid.currentTime = ED.clipStart;
+            if (!ED.playing) { vid.pause(); _updatePlayBtns(false); }
+            ED.rafId = requestAnimationFrame(tick);
+            return;
+        }
+
+        _updateTimeDisplay(t);
+        _updatePlayhead(t);
+        _syncSubOverlay(t);  // sempre sincroniza — editor é preview de estilo
+        _highlightActiveSub(t);
+        ED.rafId = requestAnimationFrame(tick);
+    };
+    ED.rafId = requestAnimationFrame(tick);
+}
+
+function _buildDemoSegments(short) {
+    const words = (short.hook || short.title || 'Texto de demonstracao aqui').split(' ');
+    // For generated clips: base = 0 (clip-relative)
+    // For original video: base = short.start (absolute timestamp)
+    const isClip = !!(short.video && short.video !== videoLocalPath);
+    const base   = isClip ? 0 : (short.start || 0);
+    const cs     = Math.max(1, Math.ceil(words.length / 4));
+    const segs   = [];
+    for (let i = 0; i < 4; i++) {
+        const text = words.slice(i * cs, (i + 1) * cs).join(' ');
+        if (text) segs.push({ start: base + i * 3, end: base + (i + 1) * 3, text });
+    }
+    if (!segs.length) segs.push({ start: base, end: base + (short.end || 45), text: short.hook || short.title || '' });
+    return segs;
+}
+
+// _onEditorTick removed — replaced by _startEditorRaf RAF loop
+
+// ── Play / Pause ──────────────────────────────────────────────────────
+function editorPlayPause() {
+    const vid = document.getElementById('editor-video');
+    if (!vid.src || vid.src === window.location.href) {
+        showToast('Selecione um clipe primeiro.');
+        return;
+    }
+    if (vid.paused) {
+        // If near end, rewind first
+        const clipEnd = ED.clipEnd ?? vid.duration ?? 9999;
+        if (vid.currentTime >= clipEnd - 0.2) vid.currentTime = ED.clipStart;
+
+        vid.play()
+            .then(() => {
+                ED.playing = true;
+                _updatePlayBtns(true);
+                _startEditorRaf(); // ensure RAF is running
+            })
+            .catch(err => {
+                console.error('[EDITOR] play() falhou:', err.message);
+                ED.playing = false;
+                _updatePlayBtns(false);
+                showToast('Erro ao reproduzir. Verifique o arquivo.');
+            });
+    } else {
+        vid.pause();
+        ED.playing = false;
+        _updatePlayBtns(false);
+    }
+}
+
+function editorToggleMute() {
+    const vid = document.getElementById('editor-video');
+    ED.muted  = !ED.muted;
+    vid.muted = ED.muted;
+    console.log(`[ÁUDIO] editor-video muted=${ED.muted}`);
+    const btn = document.getElementById('editor-vol-btn');
+    if (btn) btn.innerHTML = ED.muted
+        ? '<i data-lucide="volume-x" class="w-4 h-4"></i>'
+        : '<i data-lucide="volume-2" class="w-4 h-4"></i>';
+    lucide.createIcons();
+}
+
+function editorSeekRel(delta) {
+    const vid = document.getElementById('editor-video');
+    if (!vid.src || !ED.short) return;
+    const s = ED.clipStart;
+    const e = ED.clipEnd ?? vid.duration ?? 999;
+    vid.currentTime = Math.max(s, Math.min(e, vid.currentTime + delta));
+}
+
+// ── Timeline scrub: click + drag with RAF throttle ────────────────────
+let _tlDragging  = false;
+let _tlRafPending = false;
+let _tlWasPlaying = false;
+
+function _tlSeekFromX(clientX) {
+    if (!ED.short) return;
+    const track = document.getElementById('video-track');
+    if (!track) return;
+    const rect = track.getBoundingClientRect();
+    const pct  = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const s    = ED.clipStart;
+    const vid  = document.getElementById('editor-video');
+    const dur  = (ED.clipEnd ?? vid?.duration ?? 45) - s;
+    const newT = s + pct * dur;
+
+    if (!_tlRafPending) {
+        _tlRafPending = true;
+        requestAnimationFrame(() => {
+            _tlRafPending = false;
+            if (vid) vid.currentTime = newT;
+            _updatePlayhead(newT);
+            _updateTimeDisplay(newT);
+            _syncSubOverlay(newT);
+        });
+    }
+}
+
+function _initTimelineDrag() {
+    const scrubber = document.getElementById('timeline-scrubber');
+    const handle   = document.getElementById('playhead-handle');
+    const tlArea   = document.getElementById('timeline-scrubber')?.parentElement;
+
+    const onDown = (e) => {
+        if (!ED.short) return;
+        e.preventDefault();
+        _tlDragging  = true;
+        _tlRafPending = false;
+
+        // Pause video during drag to avoid conflicts
+        const vid = document.getElementById('editor-video');
+        _tlWasPlaying = !!(vid && !vid.paused);
+        if (vid && _tlWasPlaying) vid.pause();
+
+        // Visual feedback
+        document.getElementById('step-editor')?.classList.add('tl-dragging');
+        _tlSeekFromX(e.clientX);
+    };
+
+    const onMove = (e) => {
+        if (!_tlDragging) return;
+        e.preventDefault();
+        _tlSeekFromX(e.clientX);
+    };
+
+    const onUp = (e) => {
+        if (!_tlDragging) return;
+        _tlDragging = false;
+        document.getElementById('step-editor')?.classList.remove('tl-dragging');
+
+        // Resume if was playing before drag
+        if (_tlWasPlaying) {
+            const vid = document.getElementById('editor-video');
+            vid?.play().then(() => {
+                ED.playing = true;
+                _updatePlayBtns(true);
+            }).catch(() => {});
+        }
+    };
+
+    // Scrubber: drag to seek
+    if (scrubber) scrubber.addEventListener('mousedown', onDown);
+    // Playhead handle: drag to seek
+    if (handle)   handle.addEventListener('mousedown', onDown);
+    // Video track: click to seek
+    const vtrack = document.getElementById('video-track');
+    if (vtrack)   vtrack.addEventListener('mousedown', onDown);
+
+    // Global move/up (works even if mouse leaves the element)
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup',   onUp);
+
+    // Touch support
+    document.addEventListener('touchmove', e => {
+        if (_tlDragging) _tlSeekFromX(e.touches[0].clientX);
+    }, { passive: true });
+    document.addEventListener('touchend', onUp);
+}
+
+function editorScrub(e) {
+    // Legacy click handler — still works, delegates to _tlSeekFromX
+    if (!_tlDragging) _tlSeekFromX(e.clientX);
+}
+
+function editorZoom(val) {
+    ED.zoomFactor = parseFloat(val);
+    // Re-render subtitle track with new zoom factor applied to positions
+    // (no CSS scaleX — that distorts text and causes smearing artifacts)
+    _renderTimelineSubTrack();
+    // Visual zoom hint on the video track fill only (safe — no text inside)
+    const fill = document.getElementById('video-track-fill');
+    if (fill) fill.style.width = (100 * ED.zoomFactor) + '%';
+}
+
+// ── Subtitle style ────────────────────────────────────────────────────
+const SUB_CLASSES = ['sub-white','sub-yellow','sub-box','sub-neon','sub-fire','sub-outline','sub-3d','sub-pink','sub-matrix','sub-gold','sub-glitch','sub-bounce'];
+const SUB_LABELS  = ['Classic','Hormozi','Box','Neon','Fire','Cinema','3D Pop','Pink','Matrix','Gold','Glitch','Bounce'];
+
+function setSubStyle(idx) {
+    ED.style = idx;
+
+    document.querySelectorAll('.sub-style-btn').forEach((b, i) => {
+        const active = i === idx;
+        b.style.border    = active ? '2px solid #7c3aed'             : '1px solid rgba(255,255,255,0.07)';
+        b.style.boxShadow = active ? '0 0 10px rgba(124,58,237,0.5)' : '';
+        b.style.opacity   = active ? '1' : '0.7';
+    });
+
+    const lbl = document.getElementById('sub-style-label');
+    if (lbl) lbl.textContent = SUB_LABELS[idx] || 'Custom';
+
+    const vid = document.getElementById('editor-video');
+    const t = (vid && isFinite(vid.currentTime)) ? vid.currentTime : 0;
+    const seg = ED.segments.find(s => t >= s.start && t < s.end) || ED.segments[0];
+    if (seg) _updateSubOverlay(seg.text);
+    else     _syncSubOverlay(t);
+}
+
+function setFontSize(px) {
+    ED.fontSize = px;
+    document.querySelectorAll('.fsz-btn').forEach(b => {
+        const active = parseInt(b.getAttribute('data-fz')) === px;
+        b.style.background = active ? 'rgba(124,58,237,0.25)' : 'rgba(255,255,255,0.04)';
+        b.style.border     = active ? '1px solid rgba(124,58,237,0.5)' : '1px solid rgba(255,255,255,0.07)';
+        b.style.color      = active ? '#a855f7' : '#94a3b8';
+    });
+    // Atualiza overlay imediatamente
+    const vid = document.getElementById('editor-video');
+    const t = (vid && isFinite(vid.currentTime)) ? vid.currentTime : 0;
+    const seg = ED.segments.find(s => t >= s.start && t < s.end) || ED.segments[0];
+    if (seg) _updateSubOverlay(seg.text);
+    else     _syncSubOverlay(t);
+}
+
+function _getSubClass() { return SUB_CLASSES[ED.style] || 'sub-white'; }
+
+// Mapeia estilo visual → nome FFmpeg (3 suportados nativamente + 3 com cores extras)
+function _getFFmpegStyle() {
+    const cssToFFmpeg = {
+        'sub-white':   'white',
+        'sub-yellow':  'yellow',
+        'sub-box':     'box',
+        'sub-neon':    'cyan',
+        'sub-fire':    'fire',
+        'sub-outline': 'white',
+        'sub-3d':      'white',
+        'sub-pink':    'pink',
+        'sub-matrix':  'green',
+        'sub-gold':    'yellow',
+        'sub-glitch':  'white',
+        'sub-bounce':  'white',
+    };
+    return cssToFFmpeg[_getSubClass()] || 'white';
+}
+
+function _updateSubOverlay(text) {
+    const el = document.getElementById('editor-sub-overlay');
+    if (!el) return;
+    el.innerHTML = text ? _buildSubSpan(text) : '';
+}
+
+function _buildSubSpan(text) {
+    const cls    = _getSubClass();
+    const upper  = text.toUpperCase();
+    const px     = ED.fontSize || 22;
+    const needsDiv = ['sub-fire', 'sub-gold', 'sub-glitch', 'sub-bounce', 'sub-matrix'].includes(cls);
+    const tag = needsDiv ? 'div' : 'span';
+    return `<${tag} class="${cls} subtitle-block" style="display:inline-block;max-width:95%;word-break:break-word;text-align:center;font-size:${px}px;">${upper}</${tag}>`;
+}
+
+function _syncSubOverlay(t) {
+    const seg = ED.segments.find(s => t >= s.start && t < s.end);
+    _updateSubOverlay(seg ? seg.text : '');
+}
+
+// ── Time display / playhead ───────────────────────────────────────────
+function _updateTimeDisplay(t) {
+    if (!ED.short) return;
+    const vid = document.getElementById('editor-video');
+    // Use clip-relative bounds: t is already clip-relative (0-based)
+    const s   = ED.clipStart;
+    const dur = Math.max(1, (ED.clipEnd ?? vid?.duration ?? 30) - s);
+    const rel = Math.max(0, t - s);
+    const label = `${fmt(rel)} / ${fmt(dur)}`;
+    const el1 = document.getElementById('editor-time-display');
+    const el2 = document.getElementById('editor-tl-time');
+    if (el1) el1.textContent = label;
+    if (el2) el2.textContent = label;
+}
+
+function _updatePlayhead(t) {
+    if (!ED.short) return;
+    const vid  = document.getElementById('editor-video');
+    const s    = ED.clipStart;
+    const dur  = Math.max(1, (ED.clipEnd ?? vid?.duration ?? 30) - s);
+    const pct  = Math.min(100, Math.max(0, ((t - s) / dur) * 100));
+    const head = document.getElementById('timeline-playhead');
+    const bar  = document.getElementById('timeline-progress-bar');
+    const scrub= document.getElementById('timeline-scrubber');
+    if (head && scrub) {
+        const sw = (scrub.offsetWidth || 1) / ED.zoomFactor;
+        head.style.left = (80 + (pct / 100) * sw) + 'px';
+    }
+    if (bar) bar.style.width = pct + '%';
+}
+
+function _updatePlayBtns(playing) {
+    const icon = playing ? 'pause' : 'play';
+    ['editor-play-btn','editor-play-btn2','editor-tl-play'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.innerHTML = `<i data-lucide="${icon}" class="w-${id==='editor-tl-play'?'3.5':'5'} h-${id==='editor-tl-play'?'3.5':'5'} ${playing?'':'fill-white ml-0.5'}"></i>`;
+        }
+    });
+    lucide.createIcons();
+}
+
+// ── Cut / Undo / Redo ─────────────────────────────────────────────────
+function editorCut() {
+    const vid = document.getElementById('editor-video');
+    const t   = vid.currentTime;
+
+    // Find segment that contains t (use >= for start boundary)
+    let idx = ED.segments.findIndex(s => t >= s.start && t < s.end);
+
+    // If not inside any segment, find closest segment and cut at its midpoint
+    if (idx === -1) {
+        idx = ED.segments.findIndex(s => t <= s.start);
+        if (idx === -1) idx = ED.segments.length - 1;
+        if (idx === -1) { showToast('Nenhuma legenda para cortar.'); return; }
+    }
+
+    const seg  = ED.segments[idx];
+    const cutAt = (t >= seg.start && t < seg.end) ? t : (seg.start + seg.end) / 2;
+
+    const words = seg.text.split(' ');
+    const mid   = Math.max(1, Math.ceil(words.length / 2));
+    const s1    = { start: seg.start, end: cutAt,    text: words.slice(0, mid).join(' ') || seg.text };
+    const s2    = { start: cutAt,     end: seg.end,  text: words.slice(mid).join(' ')    || seg.text };
+
+    ED.history.push(JSON.parse(JSON.stringify(ED.segments)));
+    ED.future  = [];
+    ED.segments.splice(idx, 1, s1, s2);
+    _renderSubList();
+    _renderTimelineSubTrack();
+    showToast('Corte aplicado!');
+}
+
+function editorUndo() {
+    if (!ED.history.length) return;
+    ED.future.push(JSON.parse(JSON.stringify(ED.segments)));
+    ED.segments = ED.history.pop();
+    _renderSubList();
+    _renderTimelineSubTrack();
+    showToast('↩ Desfeito');
+}
+
+function editorRedo() {
+    if (!ED.future.length) return;
+    ED.history.push(JSON.parse(JSON.stringify(ED.segments)));
+    ED.segments = ED.future.pop();
+    _renderSubList();
+    _renderTimelineSubTrack();
+    showToast('↪ Refeito');
+}
+
+function editorAddSub() {
+    const vid = document.getElementById('editor-video');
+    const t   = vid.currentTime;
+    ED.history.push(JSON.parse(JSON.stringify(ED.segments)));
+    ED.future  = [];
+    ED.segments.push({ start:t, end:t+3, text:'Nova legenda' });
+    ED.segments.sort((a,b) => a.start - b.start);
+    _renderSubList();
+    _renderTimelineSubTrack();
+}
+
+// ── Subtitle list render ──────────────────────────────────────────────
+function _renderSubList() {
+    const list = document.getElementById('editor-sub-list');
+    if (!list) return;
+    document.getElementById('editor-sub-count').textContent = `${ED.segments.length} itens`;
+    // keep header, remove old blocks
+    list.querySelectorAll('.sub-block').forEach(el => el.remove());
+
+    ED.segments.forEach((seg, idx) => {
+        const div = document.createElement('div');
+        div.className = 'p-3 rounded-xl transition sub-block cursor-pointer';
+        div.dataset.idx = idx;
+        div.style.cssText = 'background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);';
+        
+        // Exibir sempre os tempos relativos (00:00) para o usuário não ficar confuso
+        const relStart = Math.max(0, seg.start - ED.clipStart);
+        const relEnd = Math.max(0, (seg.end || seg.start + 2) - ED.clipStart);
+
+        div.innerHTML = `
+            <div class="flex items-center justify-between mb-1.5">
+                <span class="text-[10px] text-blue-400 font-mono px-2 py-0.5 rounded" style="background:rgba(96,165,250,0.08);">${fmt(relStart)} → ${fmt(relEnd)}</span>
+                <button onclick="editorDeleteSub(${idx})" class="text-slate-700 hover:text-red-400 transition text-xs px-1">✕</button>
+            </div>
+            <textarea data-seg="${idx}" class="sub-textarea w-full bg-transparent text-sm text-slate-200 font-medium resize-none outline-none leading-relaxed" rows="2">${seg.text}</textarea>`;
+        // seek on click
+        div.addEventListener('click', e => {
+            if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'BUTTON') return;
+            document.getElementById('editor-video').currentTime = seg.start;
+        });
+        list.appendChild(div);
+    });
+
+    // wire textarea changes
+    list.querySelectorAll('.sub-textarea').forEach(ta => {
+        ta.addEventListener('input', e => {
+            const i = parseInt(e.target.dataset.seg);
+            ED.segments[i].text = e.target.value;
+            _renderTimelineSubTrack();
+        });
+    });
+}
+
+function editorDeleteSub(idx) {
+    ED.history.push(JSON.parse(JSON.stringify(ED.segments)));
+    ED.future = [];
+    ED.segments.splice(idx, 1);
+    _renderSubList();
+    _renderTimelineSubTrack();
+}
+
+let _activeSubIdx = -2; // track last active to avoid 60fps DOM mutations
+
+function _highlightActiveSub(t) {
+    // Find the current active segment index
+    let newIdx = -1;
+    for (let i = 0; i < ED.segments.length; i++) {
+        const s = ED.segments[i];
+        if (s && t >= s.start && t < s.end) { newIdx = i; break; }
+    }
+
+    // Only update DOM when the active segment actually changes
+    if (newIdx === _activeSubIdx) return;
+    _activeSubIdx = newIdx;
+
+    document.querySelectorAll('#editor-sub-list .sub-block').forEach((el, i) => {
+        el.classList.toggle('sub-active', i === newIdx);
+    });
+}
+
+// ── Timeline subtitle track ───────────────────────────────────────────
+function _renderTimelineSubTrack() {
+    const track = document.getElementById('subtitle-track');
+    if (!track || !ED.short) return;
+
+    const s   = ED.clipStart;
+    const vid = document.getElementById('editor-video');
+    const dur = Math.max(1, (ED.clipEnd ?? vid?.duration ?? 45) - s);
+    const z   = ED.zoomFactor || 1;
+
+    // Build with DocumentFragment — single atomic DOM update, no intermediate paints
+    const frag = document.createDocumentFragment();
+
+    ED.segments.forEach(seg => {
+        const left  = Math.max(0,   ((seg.start - s) / dur * 100) * z);
+        const width = Math.max(0.8, (((seg.end ?? seg.start + 2) - seg.start) / dur * 100) * z);
+        const label = (seg.text || '').replace(/</g,'&lt;').substring(0, 22);
+
+        const div = document.createElement('div');
+        div.title = seg.text || '';
+        div.style.cssText = [
+            'position:absolute',
+            `left:${left.toFixed(2)}%`,
+            `width:${width.toFixed(2)}%`,
+            'top:1px', 'bottom:1px',
+            'background:rgba(251,191,36,0.22)',
+            'border:1px solid rgba(251,191,36,0.45)',
+            'border-radius:3px',
+            'overflow:hidden',
+            'display:flex',
+            'align-items:center',
+            'padding:0 3px',
+        ].join(';');
+
+        const span = document.createElement('span');
+        span.textContent = label;     // textContent — no XSS, no innerHTML re-parsing
+        span.style.cssText = [
+            'font-size:10px',
+            'color:#fef9c3',
+            'font-weight:600',
+            'white-space:nowrap',
+            'overflow:hidden',
+            'text-overflow:ellipsis',
+            'letter-spacing:0',
+            'line-height:1',
+            'max-width:100%',
+        ].join(';');
+
+        div.appendChild(span);
+        frag.appendChild(div);
+    });
+
+    // Clear existing children using innerHTML to ensure a clean reflow and avoid smearing
+    track.innerHTML = '';
+    track.appendChild(frag);
+}
+
+// ── Export from editor ────────────────────────────────────────────────
+function editorExport() {
+    if (ED.short) exportShort(ED.short, true);
+}
+
+// ── Result preview play/pause ────────────────────────────────────────
+function resultPlayPause() {
+    const vid = document.getElementById('result-video');
+    if (!vid.src || vid.src === window.location.href) return;
+    const icon = document.getElementById('result-play-icon');
+    if (vid.paused) {
+        vid.play().catch(() => {});
+        if (icon) icon.innerHTML = '<i data-lucide="pause" class="w-7 h-7 text-white fill-white"></i>';
+    } else {
+        vid.pause();
+        if (icon) icon.innerHTML = '<i data-lucide="play" class="w-7 h-7 text-white fill-white ml-1"></i>';
+    }
+    lucide.createIcons();
+}
+
+// ── Result video subtitle sync ────────────────────────────────────────
+let _resultMuted        = true;  // start muted so autoplay works
+let _resultSubsDisabled = false; // true when clip has FFmpeg-burned subtitles
+
+// Permanently disable JS overlay (called when clip has burned subs)
+function _disableResultOverlay() {
+    _resultSubsDisabled = true;
+    if (_resultRafId) { cancelAnimationFrame(_resultRafId); _resultRafId = null; }
+    const vid = document.getElementById('result-video');
+    const el  = document.getElementById('result-sub-overlay');
+    if (vid) vid.ontimeupdate = null;
+    if (el)  { el.innerHTML = ''; el.style.display = 'none'; }
+    console.log('[LEGENDA] Overlay JS desativado — legenda ja queimada no MP4');
+}
+
+// Re-enable JS overlay (called when switching to a clip without burned subs)
+function _enableResultOverlay() {
+    _resultSubsDisabled = false;
+    const el = document.getElementById('result-sub-overlay');
+    if (el) el.style.display = '';
+}
+
+function resultToggleMute() {
+    const vid = document.getElementById('result-video');
+    _resultMuted = !_resultMuted;
+    vid.muted = _resultMuted;
+    const btn = document.getElementById('result-vol-btn');
+    if (btn) {
+        btn.innerHTML = _resultMuted
+            ? '<i data-lucide="volume-x" class="w-3.5 h-3.5 text-white"></i>'
+            : '<i data-lucide="volume-2" class="w-3.5 h-3.5 text-white"></i>';
+        lucide.createIcons();
+    }
+}
+
+function _syncResultVolBtn() {
+    // Keep button icon in sync with the actual muted state
+    const btn = document.getElementById('result-vol-btn');
+    if (!btn) return;
+    btn.innerHTML = _resultMuted
+        ? '<i data-lucide="volume-x" class="w-3.5 h-3.5 text-white"></i>'
+        : '<i data-lucide="volume-2" class="w-3.5 h-3.5 text-white"></i>';
+    lucide.createIcons();
+    console.log(`[ÁUDIO] result-video muted=${_resultMuted}`);
+}
+
+// ── VTT parser (avoids <track> CORS/race issues in Electron) ──────────
+function _vttTimeToSec(t) {
+    const p = t.trim().replace(',', '.').split(':');
+    if (p.length === 3) return +p[0] * 3600 + +p[1] * 60 + +p[2];
+    if (p.length === 2) return +p[0] * 60 + +p[1];
+    return +p[0];
+}
+
+function _parseVTT(text) {
+    const segs = [];
+    const lines = text.split('\n');
+    let i = 0;
+    while (i < lines.length) {
+        const line = lines[i].trim();
+        if (line.includes('-->')) {
+            const [sStr, eStr] = line.split('-->');
+            const s = _vttTimeToSec(sStr);
+            const e = _vttTimeToSec(eStr.split(' ')[0]); // ignore cue settings
+            let txt = '';
+            i++;
+            while (i < lines.length && lines[i].trim() !== '') {
+                txt += (txt ? ' ' : '') + lines[i].trim();
+                i++;
+            }
+            if (txt) segs.push({ start: s, end: e, text: txt });
+        } else {
+            i++;
+        }
+    }
+    return segs;
+}
+
+function _loadResultVTT(short) {
+    const vid = document.getElementById('result-video');
+    vid.querySelectorAll('track').forEach(t => t.remove());
+    vid.ontimeupdate = null; // sempre cancela listener anterior
+
+    console.log(`[LEGENDA] _loadResultVTT | short.id=${short.id} | has_burned_subs=${short.has_burned_subs}`);
+
+    // CAMADA 1: se o FFmpeg já queimou a legenda no MP4 → desativar overlay
+    if (short.has_burned_subs === true) {
+        _disableResultOverlay();
+        return;
+    }
+
+    // Clip sem legenda queimada → reativar overlay
+    _enableResultOverlay();
+
+    const vttUrl = short.vtt_url || '';
+    if (vttUrl) {
+        // Captura o short.id para detectar troca de clipe durante fetch async
+        const reqShortId = short.id;
+        fetch(vttUrl)
+            .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); })
+            .then(txt => {
+                // Aborta se o usuário trocou de clipe enquanto o fetch estava rodando
+                if (_resultSubsDisabled) return;
+                const cur = mockShorts.find(s => s.id === currentShortId);
+                if (!cur || cur.id !== reqShortId) return;
+                const parsed = _parseVTT(txt);
+                console.log(`[LEGENDA] VTT ok: ${parsed.length} segs`);
+                if (parsed.length > 0) ED.segments = parsed;
+                _initResultTimeupdateSync(short);
+            })
+            .catch(err => {
+                if (_resultSubsDisabled) return;
+                console.warn(`[LEGENDA] Falha VTT (${err.message}), usando segments locais`);
+                _initResultTimeupdateSync(short);
+            });
+        return;
+    }
+
+    _initResultTimeupdateSync(short);
+}
+
+let _resultRafId = null;
+
+function _initResultTimeupdateSync(short) {
+    if (_resultSubsDisabled) {
+        console.log('[LEGENDA] sync ignorado — overlay desativado (burned subs)');
+        return;
+    }
+    // Cancel any previous RAF loop
+    if (_resultRafId) { cancelAnimationFrame(_resultRafId); _resultRafId = null; }
+
+    const vid = document.getElementById('result-video');
+    console.log(`[LEGENDA] RAF sync iniciado — ${ED.segments.length} segs`);
+    let _lastTxt = '';
+
+    const loop = () => {
+        if (_resultSubsDisabled) { _resultRafId = null; return; }
+        const t   = vid.currentTime;
+        const seg = ED.segments.find(s => t >= s.start && t < s.end);
+        const txt = seg ? seg.text : '';
+        if (txt !== _lastTxt) {
+            _lastTxt = txt;
+            const el = document.getElementById('result-sub-overlay');
+            if (el) _updateResultOverlay(el, txt);
+        }
+        _resultRafId = requestAnimationFrame(loop);
+    };
+    _resultRafId = requestAnimationFrame(loop);
+}
+
+function _updateResultOverlay(el, text) {
+    // CAMADA 4: guard final — nunca escreve se burned subs ativo
+    if (_resultSubsDisabled) { el.innerHTML = ''; return; }
+    el.innerHTML = text ? _buildSubSpan(text) : '';
+}
+
+function onResultsShown() {
+    const short = mockShorts.find(s => s.id === currentShortId) || mockShorts[0];
+    if (!short) return;
+
+    // Build segments BEFORE loading subtitles
+    ED.short    = short;
+    ED.segments = (short.segments && short.segments.length > 0)
+        ? short.segments
+        : _buildDemoSegments(short);
+
+    // Switch result video src to the exported clip if available
+    const vid   = document.getElementById('result-video');
+    const newSrc = _resolveVideoSrc(short);
+    if (newSrc && vid.src !== newSrc) {
+        vid.src = newSrc;
+        vid.load();
+    }
+
+    // Start muted (autoplay policy), update button icon to show muted state
+    vid.muted = _resultMuted = true;
+    _syncResultVolBtn();
+    vid.play().catch(() => {});
+
+    // Show subtitle overlay only if clip does NOT have burned-in subs
+    if (short.has_burned_subs === true) {
+        _disableResultOverlay();
+    } else {
+        _enableResultOverlay();
+        const el = document.getElementById('result-sub-overlay');
+        if (el && ED.segments[0]) _updateResultOverlay(el, ED.segments[0].text);
+    }
+
+    // Wire subtitle sync
+    _loadResultVTT(short);
+    lucide.createIcons();
+}
+
+// Override setStep to init editor and result sync
+const _origSetStep = setStep;
+setStep = function(id) {
+    _origSetStep(id);
+    if (id === 'editor') {
+        const short = mockShorts.find(s => s.id === currentShortId) || mockShorts[0];
+        if (short) initEditor(short);
+        lucide.createIcons();
+    }
+    if (id === 'results') {
+        onResultsShown();
+    }
+};
+
+function renderEditorSubtitles(short) { /* legacy stub — initEditor handles this */ }
+
+// ─── TEMPLATES ────────────────────────────────────────────────────────
+function renderTemplates() {
+    const c = document.getElementById('templates-grid');
+    mockTemplates.forEach(t => {
+        c.innerHTML += `
+        <div class="glass glass-hover rounded-2xl p-2 cursor-pointer card-lift">
+            <div class="rounded-xl overflow-hidden mb-3 relative" style="height:140px; background:${t.grad};">
+                <div class="absolute inset-0" style="background:rgba(0,0,0,0.15);"></div>
+                <div class="absolute top-3 left-3">
+                    <span class="px-2.5 py-1 rounded-lg text-[11px] font-bold text-white" style="background:rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.1);">${t.cat}</span>
+                </div>
+                <div class="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity" style="background:rgba(0,0,0,0.3);">
+                    <div class="px-4 py-2 rounded-lg text-white text-xs font-bold" style="background:rgba(124,58,237,0.8); border:1px solid rgba(168,85,247,0.4);">Usar Template</div>
+                </div>
+            </div>
+            <div class="px-2 pb-3">
+                <h3 class="text-base font-bold text-white mb-1">${t.name}</h3>
+                <p class="text-xs text-slate-500">${t.desc}</p>
+            </div>
+        </div>`;
+    });
+}
+
+// Analytics removed
+
+// ─── API KEYS ─────────────────────────────────────────────────────────
+async function saveApiKey(provider) {
+    const ids = { groq:'groq-key', openrouter:'openrouter-key', hf:'hf-key', did:'did-key' };
+    const input = document.getElementById(ids[provider]);
+    const val   = input ? input.value.trim() : '';
+    if (!val) { showToast('Digite uma chave válida.'); return; }
+    localStorage.setItem(`api_${provider}`, val);
+    try {
+        await fetch(`${BACKEND_URL}/api/keys`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({[provider]:val}) });
+        showToast(`✅ Chave ${provider.toUpperCase()} salva!`);
+    } catch(_) {
+        showToast(`✅ Chave ${provider.toUpperCase()} salva localmente.`);
+    }
+}
+
+function _syncKeysToBackend() {
+    const ids = { groq:'api_groq', openrouter:'api_openrouter', hf:'api_hf', did:'api_did' };
+    const payload = {};
+    let any = false;
+    Object.entries(ids).forEach(([p, lsKey]) => {
+        const k = localStorage.getItem(lsKey);
+        const inputEl = document.getElementById(`${p}-key`);
+        if (k) { payload[p] = k; any = true; if (inputEl) inputEl.value = k; }
+    });
+    if (any) fetch(`${BACKEND_URL}/api/keys`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) }).catch(()=>{});
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────
+
+_syncKeysToBackend();
+lucide.createIcons();
+renderTemplates();
+// Select first short by default when results load
+document.addEventListener('DOMContentLoaded', () => { selectShort(1); });
+
+// ─── VIDEOFALA ────────────────────────────────────────────────────────
+const VF_SERVER = 'http://localhost:3001';
+let _vfFile = null;
+let _vfStepTimer = null;
+const _vfSteps = ['Reescrevendo com Groq IA...','Gerando narração com edge-tts...','Juntando áudio + vídeo com ffmpeg...','Finalizando...'];
+
+function vfHandleFile(file) {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.mp4') && file.type !== 'video/mp4') {
+        showToast('⚠️ Selecione um arquivo .mp4');
+        return;
+    }
+    _vfFile = file;
+    document.getElementById('vf-drop-icon').classList.add('hidden');
+    const sel = document.getElementById('vf-file-selected');
+    sel.classList.remove('hidden');
+    sel.classList.add('flex');
+    document.getElementById('vf-file-name').textContent = '✅  ' + file.name;
+}
+
+function vfClearFile() {
+    _vfFile = null;
+    document.getElementById('vf-file-input').value = '';
+    document.getElementById('vf-drop-icon').classList.remove('hidden');
+    const sel = document.getElementById('vf-file-selected');
+    sel.classList.add('hidden');
+    sel.classList.remove('flex');
+}
+
+function _vfLoading(show) {
+    const el = document.getElementById('vf-loading');
+    if (show) {
+        el.classList.remove('hidden');
+        el.classList.add('flex');
+        let i = 0;
+        document.getElementById('vf-loading-step').textContent = _vfSteps[0];
+        _vfStepTimer = setInterval(() => {
+            i = (i + 1) % _vfSteps.length;
+            document.getElementById('vf-loading-step').textContent = _vfSteps[i];
+        }, 5000);
+    } else {
+        clearInterval(_vfStepTimer);
+        el.classList.add('hidden');
+        el.classList.remove('flex');
+    }
+}
+
+async function vfGerar() {
+    const texto = (document.getElementById('vf-texto')?.value || '').trim();
+    if (!_vfFile) { showToast('⚠️ Selecione um vídeo .mp4 primeiro!'); return; }
+    if (!texto)   { showToast('⚠️ Digite o texto para narração!'); return; }
+
+    const btn = document.getElementById('vf-btn-gerar');
+    btn.disabled = true;
+    btn.textContent = 'Gerando...';
+    btn.style.opacity = '0.7';
+
+    _vfLoading(true);
+
+    try {
+        const form = new FormData();
+        form.append('video', _vfFile, _vfFile.name);
+        form.append('texto', texto);
+
+        const res  = await fetch(`${VF_SERVER}/api/gerar`, { method:'POST', body:form });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.erro || 'Erro no servidor');
+
+        _vfLoading(false);
+
+        document.getElementById('vf-texto-gerado').textContent = data.textoGerado || texto;
+        document.getElementById('vf-btn-baixar').href   = `${VF_SERVER}/download`;
+
+        const res$ = document.getElementById('vf-resultado');
+        res$.classList.remove('hidden');
+        res$.classList.add('flex','flex-col');
+        res$.scrollIntoView({ behavior:'smooth', block:'center' });
+        lucide.createIcons();
+
+    } catch (err) {
+        _vfLoading(false);
+        showToast('❌ ' + (err.message || 'Falha ao conectar com o servidor'));
+    } finally {
+        btn.disabled = false;
+        btn.style.opacity = '';
+        btn.innerHTML = '<i data-lucide="sparkles" class="w-5 h-5"></i> Gerar Vídeo';
+        lucide.createIcons();
+    }
+}
+
+function vfReset() {
+    const res$ = document.getElementById('vf-resultado');
+    res$.classList.add('hidden');
+    res$.classList.remove('flex','flex-col');
+    document.getElementById('vf-texto').value = '';
+    document.getElementById('vf-char-count').textContent = '0 chars';
+    vfClearFile();
+}
+</script>
+</body>
+</html>

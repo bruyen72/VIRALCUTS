@@ -1,0 +1,128 @@
+
+Stack (tudo grátis, sem cartão)
+
+Node.js + Express — servidor
+Groq API — reescrever o texto (modelo: llama3-8b-8192)
+edge-tts (Python) — texto para áudio em PT-BR, sem key
+ffmpeg — juntar áudio + vídeo
+HTML/CSS/JS — frontend em arquivo único
+
+
+Estrutura de arquivos
+video-voz/
+├── server.js
+├── tts.py
+├── .env
+├── .env.example
+├── package.json
+└── public/
+    └── index.html
+
+Variáveis de ambiente
+GROQ_API_KEY=sua_key_aqui
+PORT=3000
+
+tts.py
+pythonimport sys
+import asyncio
+import edge_tts
+
+async def main():
+    texto = sys.argv[1]
+    saida = sys.argv[2]
+    communicate = edge_tts.Communicate(texto, "pt-BR-FranciscaNeural")
+    await communicate.save(saida)
+
+asyncio.run(main())
+
+server.js — rotas
+POST /api/gerar
+Recebe: multipart/form-data com campos:
+
+video — arquivo mp4 (upload)
+texto — string com o texto
+
+Faz:
+
+Salva o vídeo em /tmp/input_video.mp4
+Chama Groq para reescrever o texto como narração curta, animada, máx 4 frases, tom informal e direto
+Chama python tts.py "texto_reescrito" /tmp/audio.mp3
+Chama ffmpeg para juntar áudio + vídeo:
+
+   ffmpeg -i /tmp/input_video.mp4 -i /tmp/audio.mp3 -map 0:v -map 1:a -c:v copy -shortest /tmp/output.mp4 -y
+
+Retorna o arquivo /tmp/output.mp4 para download
+
+GET /download
+Serve o arquivo /tmp/output.mp4 para download com nome video_final.mp4
+
+Frontend (public/index.html)
+Design dark, moderno, estiloso. Fonte Google: Syne (títulos) + DM Sans (corpo).
+Cores: fundo #0d0d14, acentos verde neon #00ff99.
+Componentes:
+
+Header — emoji 🎙️ + título "VozNoVídeo" bold + subtítulo pequeno "Adicione voz ao seu vídeo grátis"
+Card central (max-width 580px):
+
+Upload do vídeo — área de drag & drop estilosa com borda tracejada neon, ícone 📁, texto "Arraste seu vídeo aqui ou clique para selecionar", aceita apenas .mp4. Quando arquivo selecionado, mostra o nome do arquivo com ícone ✅
+Textarea do texto — label "Texto para narração", campo grande com borda neon suave, placeholder "Cole aqui o texto que será narrado no vídeo...", mínimo 120px altura
+Botão "Gerar Vídeo" — largura total, fundo gradiente #00ff99 → #00cc77, texto escuro bold, border-radius 12px. Durante loading: texto "Gerando..." + spinner animado, botão desabilitado
+
+
+Área de resultado (hidden até gerar):
+
+Mensagem ✅ "Vídeo pronto!"
+Botão grande "⬇️ Baixar Vídeo" com link para /download
+Botão secundário "Gerar outro" que reseta o formulário
+
+
+Toast de erro — canto inferior direito, fundo vermelho #ff4444, aparece com slide-up animation
+
+JS:
+
+Usa FormData para enviar vídeo + texto via POST /api/gerar
+Mostra loading no botão durante o processo
+Ao receber sucesso, mostra a área de resultado
+Ao receber erro, mostra o toast com a mensagem
+
+
+package.json
+json{
+  "name": "video-voz",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "groq-sdk": "^0.3.3",
+    "multer": "^1.4.5",
+    "dotenv": "^16.3.1"
+  }
+}
+
+README.md
+bash# Instalar dependências Node
+npm install
+
+# Instalar edge-tts e ffmpeg-python
+pip install edge-tts
+
+# Instalar ffmpeg no sistema (Windows)
+# Baixar em https://ffmpeg.org/download.html e adicionar ao PATH
+
+# Configurar variáveis
+cp .env.example .env
+# Editar .env com sua GROQ_API_KEY
+
+# Rodar
+npm start
+# Acessar http://localhost:3000
+
+Observações
+
+Tratar erros com mensagem clara: se ffmpeg não instalado, se Groq falhar, se arquivo não for mp4
+Deletar arquivos temporários do /tmp após download
+Frontend em arquivo único sem bundler
+Não usar TypeScript

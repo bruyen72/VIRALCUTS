@@ -1,0 +1,22 @@
+{
+  "name": "viralcuts",
+  "version": "1.0.0",
+  "description": "ViralCuts — AI Shorts Generator Desktop App",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --inspect",
+    "server": "node server.js",
+    "server:dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "groq-sdk": "^0.3.3",
+    "multer": "^1.4.5-lts.1"
+  },
+  "devDependencies": {
+    "electron": "^28.3.3",
+    "nodemon": "^3.0.2"
+  }
+}

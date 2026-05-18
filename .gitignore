@@ -1,0 +1,14 @@
+# Ignorar pastas de dependências
+node_modules/
+backend/__pycache__/
+
+# Ignorar arquivos temporários e de saída de vídeo
+backend/uploads/
+backend/outputs/
+*.mp4
+*.wav
+
+# Ignorar configurações locais
+backend/config.json
+.claude/
+.env
