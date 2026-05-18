@@ -256,6 +256,77 @@ def api_gerar():
 
 
 
+# ── VozVídeo: sincronização multi-personagem via sync_video.py ───────
+@app.route('/api/sync', methods=['POST'])
+def api_sync():
+    import subprocess, tempfile, json as _json
+
+    video       = request.files.get('video')
+    script_raw  = (request.form.get('script') or '[]').strip()
+    stretch     = request.form.get('stretch', '1') == '1'
+
+    if not video:
+        return jsonify({'erro': 'Envie um arquivo de vídeo'}), 400
+
+    try:
+        script_data = _json.loads(script_raw)
+    except Exception:
+        return jsonify({'erro': 'Script inválido (JSON esperado)'}), 400
+
+    if not script_data:
+        return jsonify({'erro': 'Script sem falas'}), 400
+
+    tmp      = tempfile.mkdtemp(prefix='sync_')
+    video_in  = os.path.join(tmp, f'input_{uuid.uuid4().hex}.mp4')
+    script_f  = os.path.join(tmp, 'script.json')
+    video_out = os.path.join(tmp, 'output.mp4')
+    sync_py   = os.path.join(os.path.dirname(BASE_DIR), 'sync_video.py')
+
+    try:
+        video.save(video_in)
+        with open(script_f, 'w', encoding='utf-8') as f:
+            _json.dump(script_data, f, ensure_ascii=False)
+
+        cmd = [
+            sys.executable, sync_py,
+            '--video',  video_in,
+            '--script', script_f,
+            '--output', video_out,
+            '--tts',    'edge',
+            '--lang',   'pt',
+        ]
+        if not stretch:
+            cmd.append('--no-stretch')
+
+        print(f'[Sync] {len(script_data)} falas → {video_out}')
+        proc = subprocess.run(cmd, capture_output=True, text=True,
+                              encoding='utf-8', errors='replace', timeout=600)
+        if proc.returncode != 0:
+            raise RuntimeError(proc.stderr[-500:] or 'sync_video.py falhou')
+
+        if not os.path.exists(video_out):
+            raise RuntimeError('Vídeo de saída não foi gerado')
+
+        def _rm(p, delay=120):
+            import time; time.sleep(delay)
+            try: import shutil; shutil.rmtree(p, ignore_errors=True)
+            except: pass
+
+        threading.Thread(target=_rm, args=(tmp,), daemon=True).start()
+
+        resp = send_file(video_out, mimetype='video/mp4',
+                         as_attachment=True, download_name='vozvideo_final.mp4')
+        resp.headers['Access-Control-Expose-Headers'] = 'X-Falas'
+        resp.headers['X-Falas'] = str(len(script_data))
+        return resp
+
+    except subprocess.TimeoutExpired:
+        return jsonify({'erro': 'Tempo limite excedido (10 min). Use um vídeo menor.'}), 500
+    except Exception as e:
+        print(f'[Sync] ERRO: {e}')
+        return jsonify({'erro': str(e)}), 500
+
+
 # ── VideoFala: lip-sync com amplitude de áudio ───────────────────────
 @app.route('/api/lipsync', methods=['POST'])
 def api_lipsync():
