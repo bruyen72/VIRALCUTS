@@ -151,8 +151,15 @@ def cut_clip_with_subtitles(video_path: str, start: float, end: float,
     force_style = styles.get(style, styles['white'])
     print(f'[FFmpeg] Queimando legenda: style={style} fs={fs}px | {os.path.basename(srt_path)}')
 
-    # Escape SRT path for FFmpeg (Windows: forward slashes + colon escaped)
-    srt_escaped = srt_path.replace('\\', '/').replace(':', '\\:')
+    # Escape SRT path for FFmpeg subtitles filter
+    # On Windows: C:\path -> C\:/path  (colon after drive letter must be escaped)
+    # On Linux/Mac: just forward slashes, no colon issue
+    srt_escaped = srt_path.replace('\\', '/')
+    # escape colon only if it's a Windows drive letter (e.g. C:/)
+    import re as _re
+    srt_escaped = _re.sub(r'^([A-Za-z]):', r'\1\\:', srt_escaped)
+    # escape spaces and single quotes
+    srt_escaped = srt_escaped.replace("'", "\\'").replace(' ', '\\ ')
 
     vf = (
         f"crop={crop_w}:{crop_h}:{crop_x}:{crop_y},"

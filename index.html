@@ -660,10 +660,8 @@
                             <div class="absolute inset-0 pointer-events-none" style="background:linear-gradient(to top,rgba(0,0,0,0.88) 0%,transparent 45%,rgba(0,0,0,0.1) 100%);"></div>
                             <!-- Subtitle overlay — covers bottom 68px to hide any burned subs -->
                             <div id="editor-sub-overlay" class="absolute z-20 w-full flex items-end justify-center px-3 text-center" style="bottom:0; height:68px; background:linear-gradient(transparent 0%, rgba(0,0,0,0.97) 38%); padding-bottom:8px;"></div>
-                            <!-- Face tracking box -->
-                            <div class="absolute z-10 pointer-events-none" style="top:22%;left:14%;width:72%;height:36%;border:2px dashed rgba(34,197,94,0.45);border-radius:10px;background:rgba(34,197,94,0.04);">
-                                <span class="absolute top-1 right-1 text-black font-black px-1.5 py-0.5 rounded bg-green-400" style="font-size:7px;">FACE AI</span>
-                            </div>
+                            <!-- Crop 9:16 guide — mostra exatamente o que será exportado -->
+                            <div id="editor-crop-guide" class="absolute z-10 pointer-events-none" style="top:0;left:50%;transform:translateX(-50%);width:56.25%;height:100%;border:2px solid rgba(255,255,255,0.25);border-radius:4px;box-shadow:0 0 0 9999px rgba(0,0,0,0.45);"></div>
                             <!-- Play/Pause overlay -->
                             <div id="editor-play-overlay" class="absolute inset-0 z-30 flex items-center justify-center" style="background:rgba(0,0,0,0.1);" onclick="editorPlayPause()">
                                 <button id="editor-play-btn" class="w-14 h-14 rounded-full flex items-center justify-center transition-all hover:scale-110" style="background:rgba(255,255,255,0.18);backdrop-filter:blur(8px);border:1.5px solid rgba(255,255,255,0.3);">
@@ -1695,13 +1693,15 @@ function initEditor(short) {
             : _buildDemoSegments(short)
     ));
 
-    // Converter os segmentos para tempo absoluto (se estiverem em tempo relativo do clipe)
-    // para casar com o currentTime do vídeo original (que toca do meio).
+    // Segmentos do server vêm normalizados (0-based relativo ao clipe).
+    // O editor toca o vídeo ORIGINAL, então precisamos converter para tempo absoluto.
+    // Regra: se o maior start dos segmentos for menor que short.start, são clip-relative.
     if (short.start && short.start > 0 && ED.segments.length > 0) {
-        if (ED.segments[0].start < short.start - 0.5) {
+        const maxStart = Math.max(...ED.segments.map(s => s.start));
+        if (maxStart < short.start) {
             ED.segments.forEach(s => {
                 s.start += short.start;
-                if (s.end) s.end += short.start;
+                if (s.end != null) s.end += short.start;
             });
         }
     }
@@ -2448,15 +2448,16 @@ function _initResultTimeupdateSync(short) {
         console.log('[LEGENDA] sync ignorado — overlay desativado (burned subs)');
         return;
     }
-    // Cancel any previous RAF loop
+    // Cancelar loop anterior e remover listener anterior
     if (_resultRafId) { cancelAnimationFrame(_resultRafId); _resultRafId = null; }
-
     const vid = document.getElementById('result-video');
-    console.log(`[LEGENDA] RAF sync iniciado — ${ED.segments.length} segs`);
+    if (vid._vfSyncHandler) { vid.removeEventListener('timeupdate', vid._vfSyncHandler); vid._vfSyncHandler = null; }
+
+    console.log(`[LEGENDA] sync iniciado — ${ED.segments.length} segs`);
     let _lastTxt = '';
 
-    const loop = () => {
-        if (_resultSubsDisabled) { _resultRafId = null; return; }
+    const syncSub = () => {
+        if (_resultSubsDisabled) return;
         const t   = vid.currentTime;
         const seg = ED.segments.find(s => t >= s.start && t < s.end);
         const txt = seg ? seg.text : '';
@@ -2465,6 +2466,16 @@ function _initResultTimeupdateSync(short) {
             const el = document.getElementById('result-sub-overlay');
             if (el) _updateResultOverlay(el, txt);
         }
+    };
+
+    // timeupdate dispara junto com o decode do frame — muito mais preciso que RAF
+    vid._vfSyncHandler = syncSub;
+    vid.addEventListener('timeupdate', syncSub);
+
+    // RAF como fallback durante pausa (timeupdate não dispara em vídeo pausado)
+    const loop = () => {
+        if (_resultSubsDisabled) { _resultRafId = null; return; }
+        if (vid.paused) syncSub();
         _resultRafId = requestAnimationFrame(loop);
     };
     _resultRafId = requestAnimationFrame(loop);
