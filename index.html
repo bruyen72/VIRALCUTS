@@ -2590,7 +2590,7 @@ renderTemplates();
 document.addEventListener('DOMContentLoaded', () => { selectShort(1); });
 
 // ─── VIDEOFALA ────────────────────────────────────────────────────────
-const VF_SERVER = 'http://localhost:3001';
+const VF_SERVER = BACKEND_URL;
 let _vfFile = null;
 let _vfStepTimer = null;
 const _vfSteps = ['Reescrevendo com Groq IA...','Gerando narração com edge-tts...','Juntando áudio + vídeo com ffmpeg...','Finalizando...'];
@@ -2653,14 +2653,24 @@ async function vfGerar() {
         form.append('video', _vfFile, _vfFile.name);
         form.append('texto', texto);
 
-        const res  = await fetch(`${VF_SERVER}/api/gerar`, { method:'POST', body:form });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.erro || 'Erro no servidor');
+        const res = await fetch(`${VF_SERVER}/api/gerar`, { method:'POST', body:form });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({erro: 'Erro no servidor'}));
+            throw new Error(err.erro || 'Erro no servidor');
+        }
+
+        // resposta é o arquivo de vídeo direto
+        const blob    = await res.blob();
+        const videoURL = URL.createObjectURL(blob);
+
+        // tenta pegar textoGerado do header (Flask envia em X-Texto-Gerado)
+        const textoGerado = res.headers.get('X-Texto-Gerado') || texto;
 
         _vfLoading(false);
 
-        document.getElementById('vf-texto-gerado').textContent = data.textoGerado || texto;
-        document.getElementById('vf-btn-baixar').href   = `${VF_SERVER}/download`;
+        document.getElementById('vf-texto-gerado').textContent = textoGerado;
+        document.getElementById('vf-btn-baixar').href = videoURL;
 
         const res$ = document.getElementById('vf-resultado');
         res$.classList.remove('hidden');

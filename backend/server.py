@@ -11,7 +11,24 @@ from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=False)
+
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin']  = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,Accept'
+    response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS'
+    return response
+
+@app.before_request
+def handle_options():
+    if request.method == 'OPTIONS':
+        from flask import make_response
+        res = make_response()
+        res.headers['Access-Control-Allow-Origin']  = '*'
+        res.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,Accept'
+        res.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS'
+        return res
 
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_DIR = os.path.join(BASE_DIR, 'uploads')
@@ -154,42 +171,42 @@ def serve_subtitle():
     return resp
 
 
-# ── VideoFala: gerar vídeo falante com mídia do usuário ──────────────
+# ── VideoFala: gerar vídeo com narração IA ───────────────────────────
 @app.route('/api/gerar', methods=['POST'])
 def api_gerar():
-    import subprocess, tempfile, time
+    import subprocess, tempfile
 
     texto = (request.form.get('texto') or '').strip()
-    midia = request.files.get('midia')
+    video = request.files.get('video')
 
     if not texto:
         return jsonify({'erro': 'Texto não pode estar vazio'}), 400
-    if not midia:
-        return jsonify({'erro': 'Envie um vídeo ou imagem'}), 400
+    if not video:
+        return jsonify({'erro': 'Envie um arquivo de vídeo .mp4'}), 400
 
     groq_key = api_keys.get('groq', '') or os.environ.get('GROQ_API_KEY', '')
-    did_key  = api_keys.get('did',  '') or os.environ.get('DID_API_KEY',  '')
-
     if not groq_key:
         return jsonify({'erro': 'GROQ_API_KEY não configurada. Vá em APIs Gratuitas e salve sua chave Groq.'}), 400
-    if not did_key:
-        return jsonify({'erro': 'DID_API_KEY não configurada. Vá em APIs Gratuitas e salve sua chave D-ID.'}), 400
 
     try:
         import requests as req_lib
     except ImportError:
         return jsonify({'erro': 'Pacote "requests" não instalado. Execute: pip install requests'}), 500
 
-    audio_path = None
-    midia_path = None
+    tmp        = tempfile.gettempdir()
+    video_in   = os.path.join(tmp, f'vf_in_{uuid.uuid4().hex}.mp4')
+    audio_path = os.path.join(tmp, f'vf_audio_{uuid.uuid4().hex}.mp3')
+    video_out  = os.path.join(tmp, f'vf_out_{uuid.uuid4().hex}.mp4')
+    tts_script = os.path.join(os.path.dirname(BASE_DIR), 'tts.py')
+
     try:
         # 1 — Reescrever texto com Groq
-        print('[VideoFala 1/5] Reescrevendo com Groq...')
+        print('[VideoFala 1/3] Reescrevendo com Groq...')
         r = req_lib.post(
             'https://api.groq.com/openai/v1/chat/completions',
             headers={'Authorization': f'Bearer {groq_key}', 'Content-Type': 'application/json'},
             json={
-                'model': 'llama3-8b-8192',
+                'model': 'llama-3.1-8b-instant',
                 'messages': [
                     {'role': 'system', 'content': 'Você é um narrador animado e informal. Reescreva o texto como narração curta e envolvente, máximo 4 frases, tom amigável. Responda APENAS com o texto reescrito.'},
                     {'role': 'user',   'content': texto}
@@ -201,90 +218,52 @@ def api_gerar():
         r.raise_for_status()
         texto_gerado = r.json()['choices'][0]['message']['content'].strip()
 
-        # 2 — Gerar áudio com gTTS
-        print('[VideoFala 2/5] Gerando áudio...')
-        audio_path = os.path.join(tempfile.gettempdir(), f'vf_audio_{uuid.uuid4().hex}.mp3')
-        tts_script = os.path.join(os.path.dirname(BASE_DIR), 'tts.py')
+        # 2 — Salvar vídeo e gerar áudio com edge-tts
+        print('[VideoFala 2/3] Gerando áudio com edge-tts...')
+        video.save(video_in)
         proc = subprocess.run(
             [sys.executable, tts_script, texto_gerado, audio_path],
-            capture_output=True, text=True, timeout=30
+            capture_output=True, text=True, timeout=60
         )
         if proc.returncode != 0:
-            raise RuntimeError(f'gTTS falhou: {proc.stderr}')
+            raise RuntimeError(f'edge-tts falhou: {proc.stderr}')
 
-        # 3 — Salvar mídia do usuário e fazer upload no D-ID
-        print('[VideoFala 3/5] Enviando mídia para D-ID...')
-        ext = os.path.splitext(midia.filename)[1].lower() or '.jpg'
-        midia_path = os.path.join(tempfile.gettempdir(), f'vf_midia_{uuid.uuid4().hex}{ext}')
-        midia.save(midia_path)
-
-        mime = midia.content_type or ('video/mp4' if ext in ('.mp4','.mov','.avi') else 'image/jpeg')
-        did_endpoint = 'videos' if mime.startswith('video') else 'images'
-        field_name   = 'video'  if mime.startswith('video') else 'image'
-
-        with open(midia_path, 'rb') as mf:
-            up = req_lib.post(
-                f'https://api.d-id.com/{did_endpoint}',
-                headers={'Authorization': f'Basic {did_key}'},
-                files={field_name: (os.path.basename(midia_path), mf, mime)},
-                timeout=60
-            )
-        up.raise_for_status()
-        source_url = up.json().get('url') or up.json().get('id')
-        if not source_url:
-            raise RuntimeError(f'D-ID não retornou URL da mídia: {up.text}')
-
-        # 4 — Upload do áudio no D-ID
-        print('[VideoFala 4/5] Enviando áudio...')
-        with open(audio_path, 'rb') as af:
-            ua = req_lib.post(
-                'https://api.d-id.com/audios',
-                headers={'Authorization': f'Basic {did_key}'},
-                files={'audio': ('audio.mp3', af, 'audio/mpeg')},
-                timeout=60
-            )
-        ua.raise_for_status()
-        audio_url = ua.json()['url']
-
-        # 5 — Criar talk no D-ID com a mídia do usuário
-        print('[VideoFala 5/5] Criando talk...')
-        tk = req_lib.post(
-            'https://api.d-id.com/talks',
-            headers={'Authorization': f'Basic {did_key}', 'Content-Type': 'application/json'},
-            json={'source_url': source_url, 'script': {'type': 'audio', 'audio_url': audio_url}},
-            timeout=30
+        # 3 — Juntar vídeo + áudio com ffmpeg
+        print('[VideoFala 3/3] Juntando com ffmpeg...')
+        ffmpeg_proc = subprocess.run(
+            ['ffmpeg', '-y', '-i', video_in, '-i', audio_path,
+             '-map', '0:v', '-map', '1:a', '-c:v', 'copy', '-shortest', video_out],
+            capture_output=True, text=True, timeout=120
         )
-        tk.raise_for_status()
-        talk_id = tk.json()['id']
+        if ffmpeg_proc.returncode != 0:
+            raise RuntimeError(f'ffmpeg falhou: {ffmpeg_proc.stderr[-300:]}')
 
-        # 6 — Polling até concluir
-        deadline = time.time() + 90
-        video_url = None
-        while time.time() < deadline:
-            st = req_lib.get(
-                f'https://api.d-id.com/talks/{talk_id}',
-                headers={'Authorization': f'Basic {did_key}'}, timeout=15
-            ).json()
-            if st.get('status') == 'done' and st.get('result_url'):
-                video_url = st['result_url']; break
-            if st.get('status') == 'error':
-                raise RuntimeError('D-ID retornou erro ao processar vídeo')
-            time.sleep(3)
+        # Serve o arquivo e apaga depois
+        print(f'[VideoFala] Concluído: {video_out}')
 
-        if not video_url:
-            raise RuntimeError('Timeout: vídeo demorou mais de 90 segundos')
+        def remover_depois(path):
+            import time; time.sleep(60)
+            try: os.remove(path)
+            except: pass
 
-        print(f'[VideoFala] Concluído: {video_url}')
-        return jsonify({'videoUrl': video_url, 'textoGerado': texto_gerado})
+        threading.Thread(target=remover_depois, args=(video_out,), daemon=True).start()
+
+        resp = send_file(video_out, mimetype='video/mp4',
+                         as_attachment=True, download_name='video_final.mp4')
+        resp.headers['X-Texto-Gerado'] = texto_gerado.encode('utf-8').decode('latin-1', errors='replace')
+        resp.headers['Access-Control-Expose-Headers'] = 'X-Texto-Gerado'
+        return resp
 
     except Exception as e:
         print(f'[VideoFala] ERRO: {e}')
         return jsonify({'erro': str(e)}), 500
     finally:
-        for p in [audio_path, midia_path]:
-            if p and os.path.exists(p):
-                try: os.remove(p)
-                except: pass
+        for p in [video_in, audio_path]:
+            try:
+                if os.path.exists(p): os.remove(p)
+            except: pass
+
+
 
 
 # ── Pipeline worker ───────────────────────────────────────────────────
