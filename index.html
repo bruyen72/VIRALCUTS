@@ -1057,115 +1057,160 @@
         .vf-dropzone:hover,.vf-dropzone.drag{border-color:#00ff99;background:rgba(0,255,153,0.05);}
         @keyframes vf-slide-up{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
         .vf-slide-up{animation:vf-slide-up .4s ease both;}
+        #vf-mouth-rect{position:absolute;border:2px solid #00ff99;border-radius:4px;pointer-events:none;display:none;box-shadow:0 0 0 9999px rgba(0,0,0,0.35);}
+        #vf-mouth-label{position:absolute;top:-22px;left:0;font-size:10px;font-weight:900;color:#00ff99;background:rgba(0,0,0,0.7);padding:2px 6px;border-radius:4px;white-space:nowrap;}
     </style>
     <div id="tab-videofala" class="tab-section flex-1 overflow-y-auto" style="background:#0d0d14;">
-      <!-- conteúdo centralizado -->
-      <div class="flex flex-col items-center justify-start min-h-full px-6 py-12">
+      <div class="flex flex-col items-center justify-start min-h-full px-6 py-10">
 
         <!-- HEADER -->
-        <div class="text-center mb-10 vf-slide-up">
+        <div class="text-center mb-8 vf-slide-up">
           <div class="text-5xl mb-3">🎙️</div>
-          <h1 class="text-4xl font-black text-white mb-2" style="font-family:'Inter',sans-serif;letter-spacing:-0.02em;">VozNo<span style="background:linear-gradient(90deg,#00ff99,#00cc77);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;">Vídeo</span></h1>
-          <p class="text-base" style="color:#64748b;">Adicione voz ao seu vídeo grátis</p>
+          <h1 class="text-4xl font-black text-white mb-2">VozNo<span style="background:linear-gradient(90deg,#00ff99,#00cc77);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;">Vídeo</span></h1>
+          <p class="text-sm" style="color:#64748b;">Marque a boca do personagem → digite o texto → a boca mexe com a voz</p>
         </div>
 
-        <!-- CARD CENTRAL -->
-        <div class="w-full vf-slide-up" style="max-width:580px;animation-delay:.08s;">
+        <!-- CARD PRINCIPAL -->
+        <div class="w-full vf-slide-up" style="max-width:680px;animation-delay:.07s;">
           <div class="rounded-2xl overflow-hidden" style="background:#12121e;border:1px solid rgba(255,255,255,0.07);box-shadow:0 24px 60px rgba(0,0,0,0.5);">
 
-            <!-- ── UPLOAD DO VÍDEO ── -->
+            <!-- ── PASSO 1: Upload ── -->
             <div class="p-6" style="border-bottom:1px solid rgba(255,255,255,0.06);">
-              <label class="text-xs font-black uppercase tracking-widest mb-3 block" style="color:#00ff99;">📁 Seu vídeo (.mp4)</label>
+              <div class="flex items-center gap-2 mb-3">
+                <div class="w-5 h-5 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0" style="background:#00ff99;color:#061a0d;">1</div>
+                <label class="text-xs font-black uppercase tracking-widest" style="color:#00ff99;">Carregue o vídeo</label>
+              </div>
+
+              <!-- Drop zone (some quando vídeo carregado) -->
               <div id="vf-dropzone"
-                class="vf-dropzone rounded-xl flex flex-col items-center justify-center gap-3 cursor-pointer relative overflow-hidden"
-                style="height:140px;background:rgba(0,255,153,0.02);"
+                class="vf-dropzone rounded-xl flex flex-col items-center justify-center gap-3 cursor-pointer"
+                style="height:110px;background:rgba(0,255,153,0.02);"
                 onclick="document.getElementById('vf-file-input').click()"
                 ondragover="event.preventDefault();this.classList.add('drag')"
                 ondragleave="this.classList.remove('drag')"
                 ondrop="event.preventDefault();this.classList.remove('drag');vfHandleFile(event.dataTransfer.files[0])">
-
-                <!-- ícone padrão -->
                 <div id="vf-drop-icon" class="flex flex-col items-center gap-2 pointer-events-none">
                   <span class="text-3xl">📁</span>
-                  <p class="text-sm font-semibold text-white">Arraste seu vídeo aqui ou clique para selecionar</p>
-                  <p class="text-xs" style="color:#475569;">Aceita apenas .mp4</p>
+                  <p class="text-sm font-semibold text-white">Arraste ou clique para selecionar</p>
+                  <p class="text-xs" style="color:#475569;">Apenas .mp4</p>
                 </div>
-
-                <!-- arquivo selecionado -->
-                <div id="vf-file-selected" class="hidden flex-col items-center gap-2 pointer-events-none">
-                  <span class="text-3xl">✅</span>
-                  <p id="vf-file-name" class="text-sm font-bold text-white text-center px-4 truncate" style="max-width:480px;"></p>
-                  <button class="pointer-events-auto text-xs px-3 py-1 rounded-lg transition-all" style="color:#64748b;background:rgba(255,255,255,0.06);"
-                    onclick="event.stopPropagation();vfClearFile()">✕ Remover</button>
+                <div id="vf-file-selected" class="hidden flex-col items-center gap-1 pointer-events-none">
+                  <span class="text-2xl">✅</span>
+                  <p id="vf-file-name" class="text-xs font-bold text-white truncate" style="max-width:380px;"></p>
+                  <button class="pointer-events-auto text-xs px-3 py-1 rounded-lg mt-1" style="color:#64748b;background:rgba(255,255,255,0.06);"
+                    onclick="event.stopPropagation();vfClearFile()">✕ Trocar</button>
                 </div>
               </div>
               <input id="vf-file-input" type="file" accept=".mp4,video/mp4" class="hidden" onchange="vfHandleFile(this.files[0])"/>
             </div>
 
-            <!-- ── TEXTAREA DO TEXTO ── -->
+            <!-- ── PASSO 2: Preview + marcar boca ── -->
+            <div id="vf-step-boca" class="hidden p-6" style="border-bottom:1px solid rgba(255,255,255,0.06);">
+              <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-2">
+                  <div class="w-5 h-5 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0" style="background:#00ff99;color:#061a0d;">2</div>
+                  <span class="text-xs font-black uppercase tracking-widest" style="color:#00ff99;">Clique na boca do personagem</span>
+                </div>
+                <span id="vf-boca-status" class="text-xs font-bold" style="color:#334155;">Nenhuma marcada</span>
+              </div>
+
+              <!-- Preview com overlay clicável -->
+              <div class="relative rounded-xl overflow-hidden" style="background:#000;" id="vf-preview-wrap">
+                <video id="vf-preview-video" class="w-full block" style="max-height:300px;object-fit:contain;" muted playsinline></video>
+                <!-- Canvas de overlay para marcar boca -->
+                <canvas id="vf-mouth-canvas" class="absolute inset-0 w-full h-full" style="cursor:crosshair;opacity:0.01;"></canvas>
+                <!-- Retângulo visual da boca marcada -->
+                <div id="vf-mouth-rect">
+                  <span id="vf-mouth-label">👄 Boca</span>
+                </div>
+              </div>
+
+              <p class="text-xs mt-2 text-center" style="color:#475569;">
+                Clique e arraste para marcar a região da boca •
+                <button onclick="vfClearBoca()" class="underline" style="color:#64748b;">limpar</button>
+              </p>
+            </div>
+
+            <!-- ── PASSO 3: Texto ── -->
             <div class="p-6" style="border-bottom:1px solid rgba(255,255,255,0.06);">
-              <label class="text-xs font-black uppercase tracking-widest mb-3 block" style="color:#00ff99;">Texto para narração</label>
+              <div class="flex items-center gap-2 mb-3">
+                <div class="w-5 h-5 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0" style="background:#00ff99;color:#061a0d;">3</div>
+                <label class="text-xs font-black uppercase tracking-widest" style="color:#00ff99;">Digite o que o personagem vai falar</label>
+              </div>
               <textarea id="vf-texto"
-                placeholder="Cole aqui o texto que será narrado no vídeo..."
+                placeholder="Ex: Oi gente! Eu sou o peixinho e vim te contar uma dica incrível de hoje!"
                 oninput="document.getElementById('vf-char-count').textContent=this.value.length+' chars'"
                 onfocus="this.style.borderColor='rgba(0,255,153,0.5)'"
                 onblur="this.style.borderColor='rgba(255,255,255,0.08)'"
                 class="w-full resize-none rounded-xl text-sm leading-7"
-                style="background:#0d0d14;border:1.5px solid rgba(255,255,255,0.08);padding:14px 16px;color:#e2e8f0;font-family:'Inter',sans-serif;min-height:120px;caret-color:#00ff99;transition:border-color .2s;"
+                style="background:#0d0d14;border:1.5px solid rgba(255,255,255,0.08);padding:14px 16px;color:#e2e8f0;font-family:'Inter',sans-serif;min-height:100px;caret-color:#00ff99;transition:border-color .2s;"
               ></textarea>
-              <div class="flex justify-end mt-1.5">
+              <div class="flex justify-end mt-1">
                 <span id="vf-char-count" class="text-xs tabular-nums" style="color:#334155;">0 chars</span>
               </div>
             </div>
 
             <!-- ── BOTÃO GERAR ── -->
-            <div class="p-6">
-              <button id="vf-btn-gerar" onclick="vfGerar()"
-                class="w-full flex items-center justify-center gap-3 font-black text-base rounded-xl transition-all duration-200"
-                style="padding:15px;background:linear-gradient(135deg,#00ff99,#00cc77);color:#061a0d;border-radius:12px;box-shadow:0 8px 28px rgba(0,255,153,0.3);"
+            <div class="p-6 flex flex-col gap-3">
+              <!-- lip-sync (principal) -->
+              <button id="vf-btn-lipsync" onclick="vfGerarLipsync()"
+                class="w-full flex items-center justify-center gap-2 font-black text-base rounded-xl transition-all duration-200"
+                style="padding:14px;background:linear-gradient(135deg,#00ff99,#00cc77);color:#061a0d;box-shadow:0 8px 28px rgba(0,255,153,0.3);"
                 onmouseover="this.style.transform='scale(1.02)';this.style.boxShadow='0 12px 36px rgba(0,255,153,0.45)'"
                 onmouseout="this.style.transform='';this.style.boxShadow='0 8px 28px rgba(0,255,153,0.3)'">
-                <i data-lucide="sparkles" class="w-5 h-5"></i>
-                Gerar Vídeo
+                <i data-lucide="aperture" class="w-5 h-5"></i>
+                Gerar com Lip-Sync (boca mexe)
+              </button>
+              <!-- sem lip-sync (fallback rápido) -->
+              <button id="vf-btn-gerar" onclick="vfGerar()"
+                class="w-full flex items-center justify-center gap-2 font-semibold text-sm rounded-xl transition-all"
+                style="padding:11px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:#64748b;"
+                onmouseover="this.style.color='#e2e8f0';this.style.background='rgba(255,255,255,0.08)'"
+                onmouseout="this.style.color='#64748b';this.style.background='rgba(255,255,255,0.04)'">
+                Só áudio (sem lip-sync, mais rápido)
               </button>
             </div>
 
           </div>
         </div>
 
-        <!-- ── ÁREA DE RESULTADO ── -->
-        <div id="vf-resultado" class="hidden w-full mt-8 vf-slide-up" style="max-width:580px;">
-          <div class="rounded-2xl p-8 text-center" style="background:#12121e;border:1px solid rgba(0,255,153,0.2);box-shadow:0 0 40px rgba(0,255,153,0.06);">
-            <div class="text-4xl mb-3">✅</div>
-            <h3 class="text-xl font-black text-white mb-1">Vídeo pronto!</h3>
-            <div class="rounded-xl p-3 mb-6 text-left" style="background:rgba(0,255,153,0.04);border:1px solid rgba(0,255,153,0.1);">
-              <p class="text-xs font-black uppercase tracking-widest mb-1" style="color:#00ff99;">Narração gerada pela IA</p>
-              <p id="vf-texto-gerado" class="text-sm leading-relaxed" style="color:#94a3b8;"></p>
+        <!-- ── RESULTADO ── -->
+        <div id="vf-resultado" class="hidden w-full mt-8 vf-slide-up" style="max-width:680px;">
+          <div class="rounded-2xl overflow-hidden" style="background:#12121e;border:1px solid rgba(0,255,153,0.2);box-shadow:0 0 40px rgba(0,255,153,0.06);">
+            <div class="p-6 text-center" style="border-bottom:1px solid rgba(255,255,255,0.06);">
+              <div class="text-3xl mb-2">✅</div>
+              <h3 class="text-lg font-black text-white">Vídeo pronto!</h3>
             </div>
-            <a id="vf-btn-baixar" href="#" target="_blank"
-              class="flex items-center justify-center gap-3 font-black text-base rounded-xl mb-3 transition-all"
-              style="padding:15px;background:linear-gradient(135deg,#00ff99,#00cc77);color:#061a0d;border-radius:12px;text-decoration:none;box-shadow:0 8px 28px rgba(0,255,153,0.3);"
-              onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform=''">
-              ⬇️ Baixar Vídeo
-            </a>
-            <button onclick="vfReset()"
-              class="w-full py-3 rounded-xl text-sm font-bold transition-all"
-              style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:#64748b;"
-              onmouseover="this.style.color='#e2e8f0';this.style.background='rgba(255,255,255,0.08)'"
-              onmouseout="this.style.color='#64748b';this.style.background='rgba(255,255,255,0.04)'">
-              Gerar outro
-            </button>
+            <!-- player -->
+            <div class="p-4">
+              <video id="vf-result-video" controls class="w-full rounded-xl" style="background:#000;max-height:360px;"></video>
+            </div>
+            <div class="p-6 flex flex-col gap-3">
+              <a id="vf-btn-baixar" href="#" download="videofala.mp4"
+                class="flex items-center justify-center gap-2 font-black text-sm rounded-xl transition-all"
+                style="padding:13px;background:linear-gradient(135deg,#00ff99,#00cc77);color:#061a0d;text-decoration:none;box-shadow:0 6px 20px rgba(0,255,153,0.3);"
+                onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform=''">
+                <i data-lucide="download" class="w-4 h-4"></i> Baixar Vídeo
+              </a>
+              <button onclick="vfReset()"
+                class="w-full py-3 rounded-xl text-sm font-bold transition-all"
+                style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:#64748b;"
+                onmouseover="this.style.color='#e2e8f0';this.style.background='rgba(255,255,255,0.08)'"
+                onmouseout="this.style.color='#64748b';this.style.background='rgba(255,255,255,0.04)'">
+                Gerar outro
+              </button>
+            </div>
           </div>
         </div>
 
-        <!-- Loading overlay fullscreen -->
-        <div id="vf-loading" class="hidden fixed inset-0 z-50 flex flex-col items-center justify-center gap-6" style="background:rgba(13,13,20,0.92);backdrop-filter:blur(8px);">
+        <!-- Loading fullscreen -->
+        <div id="vf-loading" class="hidden fixed inset-0 z-50 flex flex-col items-center justify-center gap-6" style="background:rgba(13,13,20,0.93);backdrop-filter:blur(10px);">
           <div class="relative">
             <div style="width:72px;height:72px;border-radius:50%;border:3px solid rgba(0,255,153,0.12);border-top:3px solid #00ff99;animation:spin-slow 0.9s linear infinite;"></div>
             <div style="width:50px;height:50px;border-radius:50%;border:2px solid transparent;border-bottom:2px solid rgba(0,255,153,0.5);position:absolute;top:11px;left:11px;animation:spin-reverse 0.65s linear infinite;"></div>
           </div>
           <div class="text-center">
-            <p class="text-lg font-black text-white mb-2">Gerando...</p>
+            <p class="text-lg font-black text-white mb-2">Processando...</p>
             <p id="vf-loading-step" class="text-sm" style="color:#00ff99;">Aguarde</p>
           </div>
         </div>
@@ -2602,62 +2647,211 @@ document.addEventListener('DOMContentLoaded', () => { selectShort(1); });
 
 // ─── VIDEOFALA ────────────────────────────────────────────────────────
 const VF_SERVER = BACKEND_URL;
-let _vfFile = null;
+let _vfFile     = null;
+let _vfBoca     = null;   // {x,y,w,h,preview_w,preview_h} no espaço do preview
 let _vfStepTimer = null;
-const _vfSteps = ['Reescrevendo com Groq IA...','Gerando narração com edge-tts...','Juntando áudio + vídeo com ffmpeg...','Finalizando...'];
+let _vfDragging  = false;
+let _vfDragStart = null;
 
+const _vfStepsLip  = ['Gerando narração (edge-tts)...','Analisando amplitude do áudio...','Processando lip-sync frame a frame...','Finalizando vídeo...'];
+const _vfStepsAudio= ['Gerando narração (edge-tts)...','Sincronizando áudio + vídeo (ffmpeg)...','Finalizando...'];
+
+// ── Arquivo ────────────────────────────────────────────────────────
 function vfHandleFile(file) {
     if (!file) return;
     if (!file.name.toLowerCase().endsWith('.mp4') && file.type !== 'video/mp4') {
-        showToast('⚠️ Selecione um arquivo .mp4');
-        return;
+        showToast('⚠️ Selecione um arquivo .mp4'); return;
     }
     _vfFile = file;
+    _vfBoca = null;
+
+    // Mostrar nome no dropzone
     document.getElementById('vf-drop-icon').classList.add('hidden');
     const sel = document.getElementById('vf-file-selected');
-    sel.classList.remove('hidden');
-    sel.classList.add('flex');
-    document.getElementById('vf-file-name').textContent = '✅  ' + file.name;
+    sel.classList.remove('hidden'); sel.classList.add('flex');
+    document.getElementById('vf-file-name').textContent = file.name;
+
+    // Carregar preview do vídeo
+    const vid = document.getElementById('vf-preview-video');
+    vid.src = URL.createObjectURL(file);
+    vid.load();
+
+    // Mostrar seção de marcação de boca
+    const stepBoca = document.getElementById('vf-step-boca');
+    stepBoca.classList.remove('hidden');
+    stepBoca.scrollIntoView({ behavior:'smooth', block:'nearest' });
+
+    // Inicializar canvas de marcação
+    vid.onloadedmetadata = () => vfInitMouthCanvas();
 }
 
 function vfClearFile() {
     _vfFile = null;
+    _vfBoca = null;
     document.getElementById('vf-file-input').value = '';
     document.getElementById('vf-drop-icon').classList.remove('hidden');
     const sel = document.getElementById('vf-file-selected');
-    sel.classList.add('hidden');
-    sel.classList.remove('flex');
+    sel.classList.add('hidden'); sel.classList.remove('flex');
+    document.getElementById('vf-step-boca').classList.add('hidden');
+    document.getElementById('vf-mouth-rect').style.display = 'none';
+    document.getElementById('vf-boca-status').textContent  = 'Nenhuma marcada';
+    document.getElementById('vf-boca-status').style.color  = '#334155';
+    const vid = document.getElementById('vf-preview-video');
+    vid.src = ''; vid.load();
 }
 
-function _vfLoading(show) {
+// ── Canvas de marcação de boca ──────────────────────────────────────
+function vfInitMouthCanvas() {
+    const wrap   = document.getElementById('vf-preview-wrap');
+    const canvas = document.getElementById('vf-mouth-canvas');
+    canvas.width  = wrap.offsetWidth;
+    canvas.height = wrap.offsetHeight;
+    canvas.style.opacity = '1';
+
+    // Remover listeners anteriores clonando o canvas
+    const newCanvas = canvas.cloneNode(true);
+    canvas.parentNode.replaceChild(newCanvas, canvas);
+
+    newCanvas.addEventListener('mousedown', (e) => {
+        _vfDragging  = true;
+        const r = newCanvas.getBoundingClientRect();
+        _vfDragStart = { x: e.clientX - r.left, y: e.clientY - r.top };
+        document.getElementById('vf-mouth-rect').style.display = 'none';
+    });
+
+    newCanvas.addEventListener('mousemove', (e) => {
+        if (!_vfDragging) return;
+        const r  = newCanvas.getBoundingClientRect();
+        const cx = e.clientX - r.left;
+        const cy = e.clientY - r.top;
+        const rx = Math.min(_vfDragStart.x, cx);
+        const ry = Math.min(_vfDragStart.y, cy);
+        const rw = Math.abs(cx - _vfDragStart.x);
+        const rh = Math.abs(cy - _vfDragStart.y);
+        vfDrawRect(rx, ry, rw, rh);
+    });
+
+    newCanvas.addEventListener('mouseup', (e) => {
+        if (!_vfDragging) return;
+        _vfDragging = false;
+        const r   = newCanvas.getBoundingClientRect();
+        const cx  = e.clientX - r.left;
+        const cy  = e.clientY - r.top;
+        const rx  = Math.min(_vfDragStart.x, cx);
+        const ry  = Math.min(_vfDragStart.y, cy);
+        const rw  = Math.abs(cx - _vfDragStart.x);
+        const rh  = Math.abs(cy - _vfDragStart.y);
+        if (rw < 8 || rh < 4) { showToast('⚠️ Arraste para marcar a boca'); return; }
+        _vfBoca = { x:rx, y:ry, w:rw, h:rh, preview_w:r.width, preview_h:r.height };
+        document.getElementById('vf-boca-status').textContent = `✅ Marcada (${Math.round(rw)}×${Math.round(rh)}px)`;
+        document.getElementById('vf-boca-status').style.color = '#00ff99';
+        vfDrawRect(rx, ry, rw, rh);
+    });
+
+    // Touch support
+    newCanvas.addEventListener('touchstart',  e => { e.preventDefault(); newCanvas.dispatchEvent(new MouseEvent('mousedown',  {clientX:e.touches[0].clientX, clientY:e.touches[0].clientY})); }, {passive:false});
+    newCanvas.addEventListener('touchmove',   e => { e.preventDefault(); newCanvas.dispatchEvent(new MouseEvent('mousemove',  {clientX:e.touches[0].clientX, clientY:e.touches[0].clientY})); }, {passive:false});
+    newCanvas.addEventListener('touchend',    e => { e.preventDefault(); newCanvas.dispatchEvent(new MouseEvent('mouseup',    {clientX:e.changedTouches[0].clientX, clientY:e.changedTouches[0].clientY})); }, {passive:false});
+}
+
+function vfDrawRect(x, y, w, h) {
+    const rect = document.getElementById('vf-mouth-rect');
+    const wrap = document.getElementById('vf-preview-wrap');
+    const wRect = wrap.getBoundingClientRect();
+    const vRect = document.getElementById('vf-preview-video').getBoundingClientRect();
+    const offY  = vRect.top - wRect.top;
+    rect.style.display = 'block';
+    rect.style.left    = x + 'px';
+    rect.style.top     = (y + offY) + 'px';
+    rect.style.width   = w + 'px';
+    rect.style.height  = h + 'px';
+}
+
+function vfClearBoca() {
+    _vfBoca = null;
+    document.getElementById('vf-mouth-rect').style.display = 'none';
+    document.getElementById('vf-boca-status').textContent  = 'Nenhuma marcada';
+    document.getElementById('vf-boca-status').style.color  = '#334155';
+}
+
+// ── Loading ─────────────────────────────────────────────────────────
+function _vfLoading(show, steps) {
     const el = document.getElementById('vf-loading');
     if (show) {
-        el.classList.remove('hidden');
-        el.classList.add('flex');
+        el.classList.remove('hidden'); el.classList.add('flex');
+        const st = steps || _vfStepsAudio;
         let i = 0;
-        document.getElementById('vf-loading-step').textContent = _vfSteps[0];
+        document.getElementById('vf-loading-step').textContent = st[0];
         _vfStepTimer = setInterval(() => {
-            i = (i + 1) % _vfSteps.length;
-            document.getElementById('vf-loading-step').textContent = _vfSteps[i];
-        }, 5000);
+            i = Math.min(i + 1, st.length - 1);
+            document.getElementById('vf-loading-step').textContent = st[i];
+        }, 7000);
     } else {
         clearInterval(_vfStepTimer);
-        el.classList.add('hidden');
-        el.classList.remove('flex');
+        el.classList.add('hidden'); el.classList.remove('flex');
     }
 }
 
+// ── Mostrar resultado ────────────────────────────────────────────────
+function _vfMostrarResultado(blob) {
+    const url = URL.createObjectURL(blob);
+    const vid = document.getElementById('vf-result-video');
+    vid.src = url;
+    vid.load();
+    vid.play().catch(() => {});
+    document.getElementById('vf-btn-baixar').href = url;
+    const res$ = document.getElementById('vf-resultado');
+    res$.classList.remove('hidden');
+    res$.scrollIntoView({ behavior:'smooth', block:'start' });
+    lucide.createIcons();
+}
+
+// ── Gerar com Lip-sync ───────────────────────────────────────────────
+async function vfGerarLipsync() {
+    const texto = (document.getElementById('vf-texto')?.value || '').trim();
+    if (!_vfFile) { showToast('⚠️ Selecione um vídeo .mp4 primeiro!'); return; }
+    if (!_vfBoca) { showToast('⚠️ Arraste para marcar a boca do personagem!'); return; }
+    if (!texto)   { showToast('⚠️ Digite o texto para narração!'); return; }
+
+    const btn = document.getElementById('vf-btn-lipsync');
+    btn.disabled = true; btn.style.opacity = '0.7';
+    btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 spin-fast"></i> Processando lip-sync...';
+    lucide.createIcons();
+    _vfLoading(true, _vfStepsLip);
+
+    try {
+        const form = new FormData();
+        form.append('video', _vfFile, _vfFile.name);
+        form.append('texto', texto);
+        form.append('boca',  JSON.stringify(_vfBoca));
+
+        const res = await fetch(`${VF_SERVER}/api/lipsync`, { method:'POST', body:form });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({erro:'Erro no servidor'}));
+            throw new Error(err.erro || 'Erro no servidor');
+        }
+        _vfLoading(false);
+        _vfMostrarResultado(await res.blob());
+    } catch (err) {
+        _vfLoading(false);
+        showToast('❌ ' + (err.message || 'Falha ao processar lip-sync'));
+    } finally {
+        btn.disabled = false; btn.style.opacity = '';
+        btn.innerHTML = '<i data-lucide="aperture" class="w-5 h-5"></i> Gerar com Lip-Sync (boca mexe)';
+        lucide.createIcons();
+    }
+}
+
+// ── Gerar só áudio (sem lip-sync) ───────────────────────────────────
 async function vfGerar() {
     const texto = (document.getElementById('vf-texto')?.value || '').trim();
     if (!_vfFile) { showToast('⚠️ Selecione um vídeo .mp4 primeiro!'); return; }
     if (!texto)   { showToast('⚠️ Digite o texto para narração!'); return; }
 
     const btn = document.getElementById('vf-btn-gerar');
-    btn.disabled = true;
+    btn.disabled = true; btn.style.opacity = '0.7';
     btn.textContent = 'Gerando...';
-    btn.style.opacity = '0.7';
-
-    _vfLoading(true);
+    _vfLoading(true, _vfStepsAudio);
 
     try {
         const form = new FormData();
@@ -2665,45 +2859,26 @@ async function vfGerar() {
         form.append('texto', texto);
 
         const res = await fetch(`${VF_SERVER}/api/gerar`, { method:'POST', body:form });
-
         if (!res.ok) {
-            const err = await res.json().catch(() => ({erro: 'Erro no servidor'}));
+            const err = await res.json().catch(() => ({erro:'Erro no servidor'}));
             throw new Error(err.erro || 'Erro no servidor');
         }
-
-        // resposta é o arquivo de vídeo direto
-        const blob    = await res.blob();
-        const videoURL = URL.createObjectURL(blob);
-
-        // tenta pegar textoGerado do header (Flask envia em X-Texto-Gerado)
-        const textoGerado = res.headers.get('X-Texto-Gerado') || texto;
-
         _vfLoading(false);
-
-        document.getElementById('vf-texto-gerado').textContent = textoGerado;
-        document.getElementById('vf-btn-baixar').href = videoURL;
-
-        const res$ = document.getElementById('vf-resultado');
-        res$.classList.remove('hidden');
-        res$.classList.add('flex','flex-col');
-        res$.scrollIntoView({ behavior:'smooth', block:'center' });
-        lucide.createIcons();
-
+        _vfMostrarResultado(await res.blob());
     } catch (err) {
         _vfLoading(false);
-        showToast('❌ ' + (err.message || 'Falha ao conectar com o servidor'));
+        showToast('❌ ' + (err.message || 'Falha ao conectar'));
     } finally {
-        btn.disabled = false;
-        btn.style.opacity = '';
-        btn.innerHTML = '<i data-lucide="sparkles" class="w-5 h-5"></i> Gerar Vídeo';
-        lucide.createIcons();
+        btn.disabled = false; btn.style.opacity = '';
+        btn.textContent = 'Só áudio (sem lip-sync, mais rápido)';
     }
 }
 
+// ── Reset ────────────────────────────────────────────────────────────
 function vfReset() {
-    const res$ = document.getElementById('vf-resultado');
-    res$.classList.add('hidden');
-    res$.classList.remove('flex','flex-col');
+    document.getElementById('vf-resultado').classList.add('hidden');
+    const vid = document.getElementById('vf-result-video');
+    vid.pause(); vid.src = '';
     document.getElementById('vf-texto').value = '';
     document.getElementById('vf-char-count').textContent = '0 chars';
     vfClearFile();

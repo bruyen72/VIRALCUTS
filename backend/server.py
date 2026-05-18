@@ -207,15 +207,26 @@ def api_gerar():
         if proc.returncode != 0:
             raise RuntimeError(f'edge-tts falhou: {proc.stderr}')
 
-        # 2 — Juntar vídeo + áudio com ffmpeg
+        # 2 — Juntar vídeo + áudio com ffmpeg (reencoda para garantir sync)
         print('[VideoFala 2/2] Juntando com ffmpeg...')
         ffmpeg_proc = subprocess.run(
-            ['ffmpeg', '-y', '-i', video_in, '-i', audio_path,
-             '-map', '0:v', '-map', '1:a', '-c:v', 'copy', '-shortest', video_out],
-            capture_output=True, text=True, timeout=120
+            [
+                'ffmpeg', '-y',
+                '-i', video_in,
+                '-i', audio_path,
+                '-map', '0:v:0',
+                '-map', '1:a:0',
+                '-c:v', 'libx264', '-preset', 'fast', '-crf', '22',
+                '-c:a', 'aac', '-b:a', '128k',
+                '-shortest',
+                '-async', '1',
+                '-vsync', '1',
+                video_out,
+            ],
+            capture_output=True, text=True, timeout=180
         )
         if ffmpeg_proc.returncode != 0:
-            raise RuntimeError(f'ffmpeg falhou: {ffmpeg_proc.stderr[-300:]}')
+            raise RuntimeError(f'ffmpeg falhou: {ffmpeg_proc.stderr[-400:]}')
 
         # Serve o arquivo e apaga depois
         print(f'[VideoFala] Concluído: {video_out}')
@@ -243,6 +254,77 @@ def api_gerar():
             except: pass
 
 
+
+
+# ── VideoFala: lip-sync com amplitude de áudio ───────────────────────
+@app.route('/api/lipsync', methods=['POST'])
+def api_lipsync():
+    import subprocess, tempfile
+
+    texto    = (request.form.get('texto') or '').strip()
+    video    = request.files.get('video')
+    boca_raw = request.form.get('boca', '{}')
+
+    if not texto:
+        return jsonify({'erro': 'Texto não pode estar vazio'}), 400
+    if not video:
+        return jsonify({'erro': 'Envie um arquivo de vídeo .mp4'}), 400
+
+    try:
+        boca = json.loads(boca_raw)
+    except Exception:
+        boca = {}
+
+    if not all(k in boca for k in ('x', 'y', 'w', 'h')):
+        return jsonify({'erro': 'Marque a região da boca no vídeo antes de gerar.'}), 400
+
+    tmp        = tempfile.gettempdir()
+    video_in   = os.path.join(tmp, f'ls_in_{uuid.uuid4().hex}.mp4')
+    audio_path = os.path.join(tmp, f'ls_audio_{uuid.uuid4().hex}.mp3')
+    video_out  = os.path.join(OUTPUT_DIR, f'lipsync_{uuid.uuid4().hex[:8]}.mp4')
+    tts_script = os.path.join(os.path.dirname(BASE_DIR), 'tts.py')
+
+    try:
+        # 1 — Salvar vídeo
+        video.save(video_in)
+
+        # 2 — Gerar áudio com edge-tts
+        print('[LipSync 1/2] Gerando áudio com edge-tts...')
+        proc = subprocess.run(
+            [sys.executable, tts_script, texto, audio_path],
+            capture_output=True, encoding='utf-8', errors='replace', timeout=60
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f'edge-tts falhou: {proc.stderr}')
+
+        # 3 — Aplicar lip-sync
+        print('[LipSync 2/2] Aplicando lip-sync...')
+        from lipsync import aplicar_lipsync
+        aplicar_lipsync(video_in, audio_path, boca, video_out)
+
+        print(f'[LipSync] Concluído: {video_out}')
+
+        def remover_depois(path, delay=120):
+            import time; time.sleep(delay)
+            try: os.remove(path)
+            except: pass
+
+        threading.Thread(target=remover_depois, args=(video_out,), daemon=True).start()
+
+        resp = send_file(video_out, mimetype='video/mp4',
+                         as_attachment=True, download_name='lipsync_final.mp4')
+        resp.headers['X-Texto-Gerado']           = texto
+        resp.headers['Access-Control-Expose-Headers'] = 'X-Texto-Gerado'
+        return resp
+
+    except Exception as e:
+        print(f'[LipSync] ERRO: {e}')
+        return jsonify({'erro': str(e)}), 500
+    finally:
+        for p in [video_in, audio_path]:
+            try:
+                if os.path.exists(p): os.remove(p)
+            except: pass
 
 
 # ── Pipeline worker ───────────────────────────────────────────────────
