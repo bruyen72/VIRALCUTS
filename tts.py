@@ -1,11 +1,13 @@
-import sys
-import asyncio
-import edge_tts
+import asyncio, sys, edge_tts
 
-async def main():
+sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
+async def gerar(texto, output):
+    communicate = edge_tts.Communicate(texto, voice="pt-BR-FranciscaNeural")
+    await communicate.save(output)
+
+if __name__ == "__main__":
     texto = sys.argv[1]
-    saida = sys.argv[2]
-    communicate = edge_tts.Communicate(texto, "pt-BR-FranciscaNeural")
-    await communicate.save(saida)
-
-asyncio.run(main())
+    output = sys.argv[2]
+    asyncio.run(gerar(texto, output))

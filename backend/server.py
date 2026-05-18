@@ -184,15 +184,6 @@ def api_gerar():
     if not video:
         return jsonify({'erro': 'Envie um arquivo de vídeo .mp4'}), 400
 
-    groq_key = api_keys.get('groq', '') or os.environ.get('GROQ_API_KEY', '')
-    if not groq_key:
-        return jsonify({'erro': 'GROQ_API_KEY não configurada. Vá em APIs Gratuitas e salve sua chave Groq.'}), 400
-
-    try:
-        import requests as req_lib
-    except ImportError:
-        return jsonify({'erro': 'Pacote "requests" não instalado. Execute: pip install requests'}), 500
-
     tmp        = tempfile.gettempdir()
     video_in   = os.path.join(tmp, f'vf_in_{uuid.uuid4().hex}.mp4')
     audio_path = os.path.join(tmp, f'vf_audio_{uuid.uuid4().hex}.mp3')
@@ -200,36 +191,24 @@ def api_gerar():
     tts_script = os.path.join(os.path.dirname(BASE_DIR), 'tts.py')
 
     try:
-        # 1 — Reescrever texto com Groq
-        print('[VideoFala 1/3] Reescrevendo com Groq...')
-        r = req_lib.post(
-            'https://api.groq.com/openai/v1/chat/completions',
-            headers={'Authorization': f'Bearer {groq_key}', 'Content-Type': 'application/json'},
-            json={
-                'model': 'llama-3.1-8b-instant',
-                'messages': [
-                    {'role': 'system', 'content': 'Você é um narrador animado e informal. Reescreva o texto como narração curta e envolvente, máximo 4 frases, tom amigável. Responda APENAS com o texto reescrito.'},
-                    {'role': 'user',   'content': texto}
-                ],
-                'max_tokens': 300, 'temperature': 0.8
-            },
-            timeout=30
-        )
-        r.raise_for_status()
-        texto_gerado = r.json()['choices'][0]['message']['content'].strip()
+        # usa exatamente o texto do usuário — sem reescrita
+        texto_gerado = texto
 
-        # 2 — Salvar vídeo e gerar áudio com edge-tts
-        print('[VideoFala 2/3] Gerando áudio com edge-tts...')
+        # 1 — Salvar vídeo e gerar áudio com edge-tts
+        print('[VideoFala 1/2] Gerando áudio com edge-tts...')
         video.save(video_in)
         proc = subprocess.run(
             [sys.executable, tts_script, texto_gerado, audio_path],
-            capture_output=True, text=True, timeout=60
+            capture_output=True,
+            encoding='utf-8',
+            errors='replace',
+            timeout=60
         )
         if proc.returncode != 0:
             raise RuntimeError(f'edge-tts falhou: {proc.stderr}')
 
-        # 3 — Juntar vídeo + áudio com ffmpeg
-        print('[VideoFala 3/3] Juntando com ffmpeg...')
+        # 2 — Juntar vídeo + áudio com ffmpeg
+        print('[VideoFala 2/2] Juntando com ffmpeg...')
         ffmpeg_proc = subprocess.run(
             ['ffmpeg', '-y', '-i', video_in, '-i', audio_path,
              '-map', '0:v', '-map', '1:a', '-c:v', 'copy', '-shortest', video_out],
@@ -250,7 +229,7 @@ def api_gerar():
 
         resp = send_file(video_out, mimetype='video/mp4',
                          as_attachment=True, download_name='video_final.mp4')
-        resp.headers['X-Texto-Gerado'] = texto_gerado.encode('utf-8').decode('latin-1', errors='replace')
+        resp.headers['X-Texto-Gerado'] = texto_gerado
         resp.headers['Access-Control-Expose-Headers'] = 'X-Texto-Gerado'
         return resp
 
