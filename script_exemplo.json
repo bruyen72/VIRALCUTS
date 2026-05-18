@@ -1,0 +1,20 @@
+[
+  {
+    "character": "Peixe",
+    "text": "Oi, eu sempre jogo a sorte e perco a partida toda...",
+    "start": 0.0,
+    "end": 4.0
+  },
+  {
+    "character": "Humano",
+    "text": "Não se preocupe, vamos tentar de novo!",
+    "start": 4.5,
+    "end": 7.5
+  },
+  {
+    "character": "Leão",
+    "text": "Rugido! Eu sou o rei desta floresta!",
+    "start": 8.0,
+    "end": 11.0
+  }
+]
